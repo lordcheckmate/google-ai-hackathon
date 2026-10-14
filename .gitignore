@@ -1,0 +1,11 @@
+# Git Ignore for Project A.E.G.I.S.
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.env
+data/
+*.png
+node_modules/
+.vscode/
+.idea/
