@@ -7,7 +7,7 @@ import re
 import logging
 from typing import Dict, Any, Optional, Callable, Tuple
 
-from app.store import get_block, save_block, delete_block, get_blocks, _CACHE, _BLOCKS
+from app.store import get_block, save_block, delete_block, get_blocks, _CACHE, _BLOCKS, get_transcript_history
 from app.blocks import render_block
 from app.blocks.generate import generate_block_json
 
@@ -171,7 +171,8 @@ async def handle_inspect(sid: str, args: Dict[str, Any], ws_sender: Callable) ->
 
     # Prompt instruction to explain this specific element
     instruction = f"Explain in detail this specific element from {record['kind']} block: {resolved_subject}."
-    child_json = generate_block_json(suggested_kind, instruction)
+    history = get_transcript_history(sid)
+    child_json = generate_block_json(suggested_kind, instruction, conversation_history=history)
     markup = render_block(suggested_kind, child_json)
 
     # Save and cache

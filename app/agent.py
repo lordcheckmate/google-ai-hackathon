@@ -18,7 +18,7 @@ from google.genai import types
 from app.models import REASONING_MODEL
 from app.blocks import render_block
 from app.blocks.generate import generate_block_json
-from app.store import get_block, save_block, delete_block, get_blocks, log_turn
+from app.store import get_block, save_block, delete_block, get_blocks, log_turn, get_transcript_history
 from app.images import generate_step_image
 from app.tts import synthesize_speech
 
@@ -73,8 +73,9 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
     existing_json = existing_record.get("json") if existing_record else None
     parent = existing_record.get("parent") if existing_record else None
 
-    # Step 1: Generate typed JSON via Gemini + Pydantic schema
-    block_json = generate_block_json(kind, instruction, existing_json)
+    # Step 1: Generate typed JSON via Gemini + Pydantic schema using full conversation context
+    history = get_transcript_history(sid)
+    block_json = generate_block_json(kind, instruction, existing_json, conversation_history=history)
 
     # Step 2: Render pure Python deterministic markup (HTML or SVG)
     markup = render_block(kind, block_json)

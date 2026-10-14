@@ -172,6 +172,17 @@ def log_turn(
             logger.warning(f"Firestore log_turn error: {e}")
 
 
+def get_transcript_history(sid: str) -> List[str]:
+    """Retrieve chronologically ordered speech transcripts for the session."""
+    turns = _TURNS.get(sid, [])
+    history = []
+    for t in turns:
+        txt = t.get("transcript")
+        if txt and txt.strip() and (not history or history[-1] != txt.strip()):
+            history.append(txt.strip())
+    return history
+
+
 # Section 6b: Drill-in Cache
 def get_cached_child(block_id: str, ref: str) -> Optional[Dict[str, Any]]:
     key = f"{block_id}::{ref}"
