@@ -74,7 +74,8 @@ def generate_block_json(
                     system_instruction=system_prompt,
                     response_mime_type="application/json",
                     response_schema=schema_cls,
-                    temperature=0.2,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    temperature=0.1,
                 ),
             )
 

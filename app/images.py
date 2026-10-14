@@ -163,10 +163,61 @@ def generate_step_image(
             f.write(generated_bytes)
         return f"/img/{image_id}"
 
+    # Instant sub-millisecond math/calculation schematic (Zero LLM latency!)
+    math_match = re.search(r"(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)", node_label)
+    if math_match:
+        op1, op, op2 = math_match.group(1), math_match.group(2), math_match.group(3)
+        try:
+            n1, n2 = float(op1), float(op2)
+            if op == "+": res_val = n1 + n2
+            elif op == "-": res_val = n1 - n2
+            elif op == "*": res_val = n1 * n2
+            elif op == "/" and n2 != 0: res_val = n1 / n2
+            else: res_val = "?"
+            res_str = f"{int(res_val)}" if isinstance(res_val, float) and res_val.is_integer() else f"{res_val}"
+        except Exception:
+            res_str = "Result"
+
+        svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 140" width="100%" height="auto">
+  <defs>
+    <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="4" flood-color="#06b6d4" flood-opacity="0.6"/>
+    </filter>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#10b981" flood-opacity="0.7"/>
+    </filter>
+  </defs>
+  <rect width="380" height="140" rx="12" fill="#050811" stroke="#1e293b" stroke-width="1.5"/>
+  <text x="25" y="24" fill="#64748b" font-size="9" font-family="monospace" letter-spacing="1">CALCULATION &amp; METRIC BREAKDOWN</text>
+  
+  <rect x="25" y="42" width="75" height="54" rx="8" fill="#0a1224" stroke="#06b6d4" stroke-width="1.5" filter="url(#glow-cyan)"/>
+  <text x="62" y="76" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle" font-family="monospace">{op1}</text>
+  <text x="62" y="112" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Value A</text>
+
+  <circle cx="125" cy="69" r="14" fill="#0f172a" stroke="#334155" stroke-width="1"/>
+  <text x="125" y="75" fill="#38bdf8" font-size="18" font-weight="bold" text-anchor="middle" font-family="monospace">{op}</text>
+
+  <rect x="165" y="42" width="75" height="54" rx="8" fill="#0a1224" stroke="#06b6d4" stroke-width="1.5" filter="url(#glow-cyan)"/>
+  <text x="202" y="76" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle" font-family="monospace">{op2}</text>
+  <text x="202" y="112" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Value B</text>
+
+  <path d="M 255 69 L 275 69" stroke="#10b981" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+  <polygon points="275,64 283,69 275,74" fill="#10b981"/>
+
+  <rect x="290" y="38" width="70" height="62" rx="10" fill="#06281e" stroke="#10b981" stroke-width="2" filter="url(#glow-green)"/>
+  <text x="325" y="76" fill="#34d399" font-size="22" font-weight="800" text-anchor="middle" font-family="monospace">{res_str}</text>
+  <text x="325" y="116" fill="#34d399" font-size="9" font-weight="bold" text-anchor="middle" font-family="sans-serif">RESULT</text>
+</svg>'''
+        generated_bytes = sanitize_svg(svg_content).encode("utf-8")
+        with open(local_path, "wb") as f:
+            f.write(generated_bytes)
+        return f"/img/{image_id}"
+
     # For explanatory schematics and answer diagrams:
     # Attempt Gemini 2.5 Flash-Lite SVG generation for exact contextual diagram
     try:
         from google import genai
+        from google.genai import types
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
         project = os.getenv("GOOGLE_CLOUD_PROJECT")
         location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
@@ -195,6 +246,10 @@ def generate_step_image(
             resp = client.models.generate_content(
                 model=REASONING_MODEL,
                 contents=prompt,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
+                    temperature=0.1,
+                ),
             )
             if resp.text:
                 raw_svg = resp.text.strip()

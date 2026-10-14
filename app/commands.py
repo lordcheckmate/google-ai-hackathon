@@ -50,12 +50,14 @@ async def handle_end(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dic
 
 
 async def handle_clear(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
-    """Clear all blocks from the canvas."""
+    """Clear all blocks from the canvas and reset agent memory."""
     blocks = get_blocks(sid)
     for b in blocks:
         delete_block(sid, b["id"])
     _CACHE.clear()
-    logger.info(f"Cleared all blocks for session {sid}")
+    from app.agent import reset_agent_session
+    await reset_agent_session(sid)
+    logger.info(f"Cleared all blocks and reset agent session for {sid}")
     await ws_sender({"type": "canvas_cleared"})
     return {"status": "ok", "cleared": len(blocks)}
 
@@ -226,17 +228,20 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
 
     # If a specific node is requested, illustrate that node; otherwise illustrate all nodes!
     norm = node_label.strip().lower()
-    if norm:
+    if norm and norm not in ("steps", "step", "all", "all steps", "workflow", "nodes"):
         target_node = None
         for n in nodes:
             if norm in n.get("label", "").lower() or norm == n.get("id", "").lower():
                 target_node = n
                 break
-        if not target_node:
-            target_node = nodes[0]
-        img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}", is_icon=True)
-        target_node["image_url"] = img_url
-        illustrated_label = target_node["label"]
+        if target_node:
+            img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}", is_icon=True)
+            target_node["image_url"] = img_url
+            illustrated_label = target_node["label"]
+        else:
+            for n in nodes:
+                n["image_url"] = generate_step_image(n["label"], f"Line icon for {n['label']}", is_icon=True)
+            illustrated_label = "all steps"
     else:
         for n in nodes:
             n["image_url"] = generate_step_image(n["label"], f"Line icon for {n['label']}", is_icon=True)

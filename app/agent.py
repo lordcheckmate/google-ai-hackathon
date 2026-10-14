@@ -4,6 +4,8 @@ Enforces Section 5 (No model ever emits markup) and Section 7 (Agent & Tools).
 """
 
 import os
+import re
+import ast
 import time
 import json
 import logging
@@ -167,11 +169,11 @@ def highlight(block_id: str, labels: list[str]) -> dict:
         for node in block_json.get("nodes", []):
             node_label = str(node.get("label", "")).strip().lower()
             node_id = str(node.get("id", "")).strip().lower()
-            node["highlight"] = (node_label in norm_labels or node_id in norm_labels)
+            node["highlight"] = any(nl in node_label or node_label in nl or nl == node_id for nl in norm_labels)
     elif kind == "checklist":
         for item in block_json.get("items", []):
             txt = str(item.get("text", "")).strip().lower()
-            item["highlight"] = any(nl in txt for nl in norm_labels)
+            item["highlight"] = any(nl in txt or txt in nl for nl in norm_labels)
 
     markup = render_block(kind, block_json)
     save_block(sid, block_id, kind, block_json, parent=record.get("parent"))
@@ -223,10 +225,14 @@ def illustrate_step(block_id: str, node_label: str, visual_description: str) -> 
     for node in block_json.get("nodes", []):
         lbl = str(node.get("label", "")).strip().lower()
         nid = str(node.get("id", "")).strip().lower()
-        if norm_target in lbl or norm_target == nid:
+        if norm_target in lbl or lbl in norm_target or norm_target == nid or any(w in lbl for w in norm_target.split() if len(w) > 3):
             node["image_url"] = img_url
             matched = True
             break
+
+    if not matched and block_json.get("nodes"):
+        block_json["nodes"][0]["image_url"] = img_url
+        matched = True
 
     if matched:
         markup = render_block("flow", block_json)
@@ -341,11 +347,48 @@ def read_back(block_id: str | None) -> str:
     return summary_text
 
 
+def try_parse_and_execute_code_tool_call(text: str) -> bool:
+    """
+    If the model outputs python tool code as text (e.g. `tool_code print(default_api.upsert_block(...))`),
+    parse and execute the tool call.
+    """
+    tool_funcs = {
+        "upsert_block": upsert_block,
+        "remove_block": remove_block,
+        "highlight": highlight,
+        "illustrate_step": illustrate_step,
+        "flag_contradiction": flag_contradiction,
+        "read_back": read_back,
+    }
+    match = re.search(r'(?:default_api\.)?(' + '|'.join(tool_funcs.keys()) + r')\s*\((.*?)\)', text, re.DOTALL)
+    if not match:
+        return False
+
+    func_name = match.group(1)
+    args_str = match.group(2).strip()
+    try:
+        tree = ast.parse(f"func({args_str})")
+        call_node = tree.body[0].value
+        kwargs = {}
+        for kw in call_node.keywords:
+            kwargs[kw.arg] = ast.literal_eval(kw.value)
+        args = [ast.literal_eval(a) for a in call_node.args]
+
+        func = tool_funcs[func_name]
+        logger.info(f"[Code Tool Call Fallback Executed] {func_name} with args={args}, kwargs={kwargs}")
+        func(*args, **kwargs)
+        return True
+    except Exception as e:
+        logger.warning(f"Failed to parse and execute code tool call '{func_name}({args_str})': {e}")
+        return False
+
+
 # =========================================================================
 # Verbatim System Instruction from Section 7
 # =========================================================================
 
 SYSTEM_INSTRUCTION = """You listen to a meeting and maintain a visual neon canvas showing what is being discussed.
+IMPORTANT: Always invoke tools using standard tool function calls. Never write Python tool code as plain text.
 WHEN TO DO NOTHING
 Most of what you hear is greetings, filler, half-finished sentences and small talk.
 Produce no tool call and no reply for those. Silence is the correct output more often
@@ -353,13 +396,12 @@ than not. Only act when something has been described, asked, compared, agreed, o
 
 AUTONOMOUS VISUALS & NANO BANANA (ALWAYS RUN SHAPE BUILDING OR NANO BANANA OR BOTH)
 You decide the representation autonomously without waiting for manual button clicks:
-- A sequence of steps, workflow, or how work moves through stages -> flow
-- Named options being weighed against each other -> compare
-- A question with a findable answer -> answer
-- Things someone agreed to do, or must be true -> checklist
+- When a sequence of steps, workflow, pipeline, or stages is described (e.g., 'first X, then Y, then Z') -> IMMEDIATELY call upsert_block with kind='flow'.
+- When calculations, numbers, metrics, or quantities are discussed (e.g. '10 + 10 units') -> IMMEDIATELY call upsert_block with kind='answer' or kind='flow' showing the visual calculation breakdown.
+- Named options being weighed against each other -> IMMEDIATELY call upsert_block with kind='compare'.
+- A question with a findable answer -> IMMEDIATELY call upsert_block with kind='answer'.
+- Things someone agreed to do, or must be true -> IMMEDIATELY call upsert_block with kind='checklist'.
 Pick the one that makes the point visible fastest.
-When asked to show something, describe a workflow, or explain steps:
-- Immediately build the visual shape via upsert_block.
 - When asked for pictures, illustrations, or to show a workflow visually, autonomously call illustrate_step for the steps so Nano Banana line icons appear directly inside the flow boxes. No button clicking required.
 
 EXPLAINING & SPEAKING ALOUD (ALWAYS DRAW PICTURE/DIAGRAM + CAPTION BELOW)
@@ -388,9 +430,12 @@ ADDRESSING YOU
 Treat any clear instruction aimed at you as addressed to you. Judge by direction, not
 by exact wording — there is no magic phrase.
 
-REPLIES
-Spoken replies are concise and to the point. Never read a block out unless asked.
-Never describe what you are about to do; just do it."""
+REPLIES & WHEN TO SPEAK
+Silence is your default in a meeting. While people speak, focus on silently updating the visual canvas (diagrams, calculations, business processes) without speaking.
+Only produce a spoken reply when:
+1. You are addressed directly or asked to explain aloud ("hey agent", "tell me", "read back", "can you explain").
+2. A contradiction is detected (call flag_contradiction once to speak over).
+Never speak confirmations or describe what you are about to do; just update the canvas silently."""
 
 
 # =========================================================================
@@ -403,6 +448,10 @@ def create_adk_agent() -> Agent:
         name="meeting_assistant",
         model=REASONING_MODEL,
         instruction=SYSTEM_INSTRUCTION,
+        generate_content_config=types.GenerateContentConfig(
+            thinking_config=types.ThinkingConfig(thinking_budget=0),
+            temperature=0.1,
+        ),
         tools=[
             upsert_block,
             remove_block,
@@ -412,6 +461,16 @@ def create_adk_agent() -> Agent:
             read_back,
         ],
     )
+
+
+ACTIVE_SESSIONS: Dict[str, "MeetingAgentSession"] = {}
+
+
+async def reset_agent_session(sid: str):
+    """Reset the session memory for a given session ID."""
+    sess = ACTIVE_SESSIONS.get(sid)
+    if sess:
+        await sess.reset()
 
 
 class MeetingAgentSession:
@@ -424,6 +483,7 @@ class MeetingAgentSession:
         self.agent = create_adk_agent()
         self.runner = InMemoryRunner(agent=self.agent, app_name="ai_meeting_assistant")
         self._session_initialized = False
+        ACTIVE_SESSIONS[sid] = self
 
     async def init_session(self):
         if not self._session_initialized:
@@ -433,6 +493,19 @@ class MeetingAgentSession:
                 app_name="ai_meeting_assistant",
             )
             self._session_initialized = True
+
+    async def reset(self):
+        """Reset the ADK conversation session so history is fresh."""
+        try:
+            await self.runner.session_service.delete_session(
+                user_id="operator",
+                session_id=self.sid,
+                app_name="ai_meeting_assistant",
+            )
+            logger.info(f"[MeetingAgentSession] Reset ADK session for {self.sid}")
+        except Exception as e:
+            logger.debug(f"[MeetingAgentSession] Reset error: {e}")
+        self._session_initialized = False
 
     async def process_turn(self, transcript_text: str):
         """Processes a speech turn through the ADK agent tool loop."""
@@ -477,18 +550,30 @@ class MeetingAgentSession:
                 session_id=self.sid,
                 new_message=content,
             ):
-                # If agent produces spoken text reply, synthesize and send
+                logger.info(f"[ADK Event] type={type(event).__name__} author={getattr(event, 'author', '')} content={getattr(event, 'content', '')}")
+                # If agent produces text reply, only speak out loud if explicitly addressed or asked
                 if event.content and event.content.parts:
                     for part in event.content.parts:
                         if hasattr(part, "text") and part.text:
                             text_reply = part.text.strip()
                             if text_reply:
-                                audio_b64 = synthesize_speech(text_reply)
-                                _emit_ws({
-                                    "type": "speak",
-                                    "text": text_reply,
-                                    "audio": audio_b64,
-                                })
+                                # If the model output python tool code instead of standard function call, execute it
+                                if try_parse_and_execute_code_tool_call(text_reply):
+                                    continue
+                                t_lower = transcript_text.lower()
+                                explicitly_asked = any(k in t_lower for k in [
+                                    "hey agent", "agent", "assistant", "aegis", "can you tell", "tell me",
+                                    "read back", "read the canvas", "explain to us", "explain to me",
+                                    "speak", "what do you think", "can you explain", "summarize out loud",
+                                    "what is", "how much", "why"
+                                ])
+                                if explicitly_asked:
+                                    audio_b64 = synthesize_speech(text_reply)
+                                    _emit_ws({
+                                        "type": "speak",
+                                        "text": text_reply,
+                                        "audio": audio_b64,
+                                    })
         except Exception as e:
             logger.error(f"Error in ADK agent turn: {e}", exc_info=True)
         finally:
