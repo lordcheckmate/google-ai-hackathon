@@ -61,10 +61,33 @@ def save_session(sid: str, title: str = "Meeting Session") -> Dict[str, Any]:
 
 
 def get_blocks(sid: str) -> List[Dict[str, Any]]:
+    if sid not in _BLOCKS or not _BLOCKS[sid]:
+        db = get_firestore_client()
+        if db:
+            try:
+                docs = db.collection("sessions").document(sid).collection("blocks").stream()
+                if sid not in _BLOCKS:
+                    _BLOCKS[sid] = {}
+                for doc in docs:
+                    data = doc.to_dict()
+                    _BLOCKS[sid][data.get("id", doc.id)] = data
+            except Exception as e:
+                logger.warning(f"Firestore get_blocks error: {e}")
     return list(_BLOCKS.get(sid, {}).values())
 
 
 def get_block(sid: str, block_id: str) -> Optional[Dict[str, Any]]:
+    if sid not in _BLOCKS or block_id not in _BLOCKS[sid]:
+        db = get_firestore_client()
+        if db:
+            try:
+                doc = db.collection("sessions").document(sid).collection("blocks").document(block_id).get()
+                if doc.exists:
+                    if sid not in _BLOCKS:
+                        _BLOCKS[sid] = {}
+                    _BLOCKS[sid][block_id] = doc.to_dict()
+            except Exception as e:
+                logger.warning(f"Firestore get_block error: {e}")
     return _BLOCKS.get(sid, {}).get(block_id)
 
 

@@ -17,6 +17,7 @@ const micIcon = document.getElementById('mic-icon');
 const micText = document.getElementById('mic-text');
 const undoBtn = document.getElementById('undo-btn');
 const clearBtn = document.getElementById('clear-btn');
+const illustrateBtn = document.getElementById('illustrate-btn');
 const sttStatus = document.getElementById('stt-status');
 const transcriptBox = document.getElementById('transcript-box');
 const transcriptFinal = document.getElementById('transcript-final');
@@ -249,6 +250,23 @@ micBtn.addEventListener('click', () => {
 
 // Section 6b & 8: Delegated click listener on the canvas
 canvasStack.addEventListener('click', (event) => {
+  // Check if Nano Banana illustrate button clicked
+  const illBtn = event.target.closest('.btn-illustrate');
+  if (illBtn) {
+    event.stopPropagation();
+    const blockId = illBtn.getAttribute('data-block-id');
+    illBtn.textContent = '🎨 Generating Icon...';
+    illBtn.disabled = true;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'command',
+        name: 'illustrate_step',
+        args: { block_id: blockId }
+      }));
+    }
+    return;
+  }
+
   const refElem = event.target.closest('[data-ref]');
   if (!refElem) return;
 
@@ -312,9 +330,14 @@ function renderOrUpdateBlock(block) {
     }
   }
 
+  const illustrateBtnHtml = block.kind === 'flow'
+    ? `<button class="btn btn-secondary btn-illustrate" data-block-id="${block.id}" style="font-size:0.75rem; padding: 3px 8px; margin-left: auto; margin-right: 8px; cursor: pointer; border-radius: 4px; background: #1e293b; border: 1px solid #38bdf8; color: #38bdf8;">🎨 Illustrate (Nano Banana)</button>`
+    : '';
+
   blockElem.innerHTML = `
-    <div class="block-top">
+    <div class="block-top" style="display: flex; align-items: center;">
       <span class="block-title">${block.title || 'Block'}</span>
+      ${illustrateBtnHtml}
       <span class="block-kind-badge">${block.kind}</span>
     </div>
     <div class="block-content">${block.html || ''}</div>
@@ -355,6 +378,14 @@ clearBtn.addEventListener('click', () => {
     }
   }
 });
+
+if (illustrateBtn) {
+  illustrateBtn.addEventListener('click', () => {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'command', name: 'illustrate_step', args: {} }));
+    }
+  });
+}
 
 if (dismissContradiction) {
   dismissContradiction.addEventListener('click', () => {

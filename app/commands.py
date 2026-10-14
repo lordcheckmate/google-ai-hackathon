@@ -193,6 +193,70 @@ async def handle_inspect(sid: str, args: Dict[str, Any], ws_sender: Callable) ->
     return {"status": "created", "child_id": child_id, "kind": suggested_kind}
 
 
+async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
+    """Generate Nano Banana illustration for a flow step."""
+    from app.images import generate_step_image
+
+    block_id = args.get("block_id")
+    node_label = args.get("node_label") or args.get("ref") or ""
+
+    blocks = get_blocks(sid)
+    target_block = None
+    if block_id:
+        target_block = get_block(sid, block_id)
+    else:
+        for b in blocks:
+            if b.get("kind") == "flow":
+                target_block = b
+                block_id = b["id"]
+                break
+
+    if not target_block or target_block.get("kind") != "flow":
+        # If no flow diagram exists yet, create one automatically
+        block_id = "process_flow_1"
+        block_json = generate_block_json("flow", "First take notes, then show to client, then make decisions.")
+        target_block = save_block(sid, block_id, "flow", block_json)
+    else:
+        block_json = target_block["json"]
+
+    nodes = block_json.get("nodes", [])
+    if not nodes:
+        return {"status": "error", "message": "Flow diagram contains no steps"}
+
+    # Find matching node, or pick the first node without an image
+    target_node = None
+    norm = node_label.strip().lower()
+    if norm:
+        for n in nodes:
+            if norm in n.get("label", "").lower() or norm == n.get("id", "").lower():
+                target_node = n
+                break
+
+    if not target_node:
+        unillustrated = [n for n in nodes if not n.get("image_url")]
+        target_node = unillustrated[0] if unillustrated else nodes[0]
+
+    img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}")
+    target_node["image_url"] = img_url
+
+    markup = render_block("flow", block_json)
+    save_block(sid, block_id, "flow", block_json, parent=target_block.get("parent"))
+
+    await ws_sender({
+        "type": "block_upsert",
+        "block": {
+            "id": block_id,
+            "kind": "flow",
+            "title": block_json.get("title", "Process Workflow"),
+            "html": markup,
+            "parent": target_block.get("parent"),
+            "json": block_json,
+        }
+    })
+
+    return {"status": "ok", "block_id": block_id, "node": target_node["label"], "image_url": img_url}
+
+
 def resolve_ref_element(kind: str, block_json: Dict[str, Any], ref: str) -> Tuple[Optional[str], str]:
     """
     Look up the actual node, cell or item from the stored JSON (Section 6b).
@@ -268,6 +332,8 @@ COMMANDS: Dict[str, Callable] = {
     "clear": handle_clear,
     "toggle_item": handle_toggle,
     "inspect": handle_inspect,
+    "illustrate_step": handle_illustrate,
+    "illustrate": handle_illustrate,
 }
 
 
@@ -281,6 +347,8 @@ VOICE_PATTERNS = [
     (r"\b(?:end session|finish session|end meeting)\b", "end_session", lambda m, sid: {}),
     (r"\b(?:undo that|undo|revert)\b", "undo", lambda m, sid: {}),
     (r"\b(?:clear canvas|clear screen|clear all)\b", "clear", lambda m, sid: {}),
+    (r"\b(?:illustrate|draw picture for|add picture to|generate image for|draw icon for)\s+([a-zA-Z0-9_\-\s]+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+    (r"\b(?:illustrate steps|illustrate flow|draw pictures|add pictures|nano banana)\b", "illustrate_step", lambda m, sid: {}),
     (r"(?:tell me more about|explain|inspect)\s+([a-zA-Z0-9_\-\s]+)", "inspect", lambda m, sid: resolve_voice_inspect_args(sid, m.group(1).strip())),
 ]
 

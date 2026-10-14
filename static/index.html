@@ -17,6 +17,7 @@
         <span class="status-dot" id="ws-dot"></span>
         <span id="ws-status">Connecting...</span>
       </div>
+      <button class="btn btn-secondary" id="illustrate-btn" title="Generate Nano Banana illustration for flow steps">🎨 Illustrate</button>
       <button class="btn btn-secondary" id="undo-btn" title="Undo last block">↩️ Undo</button>
       <button class="btn btn-secondary" id="clear-btn" title="Clear all canvas blocks">🗑️ Clear</button>
       <button class="btn btn-primary" id="mic-btn">
@@ -43,7 +44,7 @@
       <span class="transcript-final" id="transcript-final"></span><span class="transcript-interim" id="transcript-interim"></span>
     </div>
     <div class="test-input-row" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-      <input type="text" id="manual-text" placeholder="Or test speak/command here: 'First take notes, then show to client, then make decisions'..." style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-main); font-size: 0.9rem;">
+      <input type="text" id="manual-text" placeholder="Or test here: 'First take notes, then show to client', 'Illustrate Take Notes', or click 🎨 Illustrate..." style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-main); font-size: 0.9rem;">
       <button class="btn btn-secondary" id="send-manual-btn" style="white-space: nowrap;">Send Turn</button>
     </div>
   </section>
@@ -57,7 +58,10 @@
       <div class="canvas-empty" id="canvas-empty">
         <h3>Live Canvas is Listening</h3>
         <p>Speak naturally about processes, decisions, or action items. The assistant updates the canvas beside you.</p>
-        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">Try: <em>"First we take notes, then we show them to the client, then we make decisions"</em></p>
+        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
+          Try: <em>"First we take notes, then we show them to the client, then we make decisions"</em><br>
+          Then click <strong>🎨 Illustrate</strong> to generate <strong>Nano Banana</strong> icons inside the process steps!
+        </p>
       </div>
     </div>
   </main>
