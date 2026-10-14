@@ -257,6 +257,63 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     return {"status": "ok", "block_id": block_id, "node": target_node["label"], "image_url": img_url}
 
 
+async def handle_highlight(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
+    """Highlight specified steps or items in real time."""
+    labels = args.get("labels", [])
+    target = args.get("target") or args.get("node_label")
+    if target and not labels:
+        labels = [target]
+
+    blocks = get_blocks(sid)
+    if not blocks:
+        return {"status": "error", "message": "No blocks to highlight"}
+
+    block_id = args.get("block_id")
+    target_block = None
+    if block_id:
+        target_block = get_block(sid, block_id)
+    else:
+        for b in reversed(blocks):
+            if b.get("kind") in ("flow", "checklist"):
+                target_block = b
+                block_id = b["id"]
+                break
+
+    if not target_block:
+        target_block = blocks[-1]
+        block_id = target_block["id"]
+
+    kind = target_block["kind"]
+    block_json = target_block["json"]
+    norm_labels = [str(l).strip().lower() for l in labels]
+
+    if kind == "flow":
+        for node in block_json.get("nodes", []):
+            node_label = str(node.get("label", "")).strip().lower()
+            node_id = str(node.get("id", "")).strip().lower()
+            node["highlight"] = any(nl in node_label or nl == node_id for nl in norm_labels)
+    elif kind == "checklist":
+        for item in block_json.get("items", []):
+            txt = str(item.get("text", "")).strip().lower()
+            item["highlight"] = any(nl in txt for nl in norm_labels)
+
+    markup = render_block(kind, block_json)
+    save_block(sid, block_id, kind, block_json, parent=target_block.get("parent"))
+
+    await ws_sender({
+        "type": "block_upsert",
+        "block": {
+            "id": block_id,
+            "kind": kind,
+            "title": block_json.get("title", kind),
+            "html": markup,
+            "parent": target_block.get("parent"),
+            "json": block_json,
+        }
+    })
+    return {"status": "ok", "block_id": block_id, "highlighted": labels}
+
+
 def resolve_ref_element(kind: str, block_json: Dict[str, Any], ref: str) -> Tuple[Optional[str], str]:
     """
     Look up the actual node, cell or item from the stored JSON (Section 6b).
@@ -334,6 +391,7 @@ COMMANDS: Dict[str, Callable] = {
     "inspect": handle_inspect,
     "illustrate_step": handle_illustrate,
     "illustrate": handle_illustrate,
+    "highlight": handle_highlight,
 }
 
 
@@ -347,8 +405,9 @@ VOICE_PATTERNS = [
     (r"\b(?:end session|finish session|end meeting)\b", "end_session", lambda m, sid: {}),
     (r"\b(?:undo that|undo|revert)\b", "undo", lambda m, sid: {}),
     (r"\b(?:clear canvas|clear screen|clear all)\b", "clear", lambda m, sid: {}),
-    (r"\b(?:illustrate|draw picture for|add picture to|generate image for|draw icon for)\s+([a-zA-Z0-9_\-\s]+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
-    (r"\b(?:illustrate steps|illustrate flow|draw pictures|add pictures|nano banana)\b", "illustrate_step", lambda m, sid: {}),
+    (r"\b(?:highlight|focus on|emphasize)\s+([a-zA-Z0-9_\-\s]+)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
+    (r"\b(?:illustrate|draw picture for|add picture to|generate image for|draw icon for|nano banana for)\s+([a-zA-Z0-9_\-\s]+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+    (r"\b(?:illustrate steps?|illustrate flow|draw pictures?|add pictures?|nano banana)\b", "illustrate_step", lambda m, sid: {}),
     (r"(?:tell me more about|explain|inspect)\s+([a-zA-Z0-9_\-\s]+)", "inspect", lambda m, sid: resolve_voice_inspect_args(sid, m.group(1).strip())),
 ]
 

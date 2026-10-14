@@ -3,66 +3,131 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Live AI Meeting Assistant</title>
+  <title>AEGIS // AI Meeting Co-Pilot</title>
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <header>
-    <div class="brand">
-      <div class="brand-icon">AI</div>
-      <h1>Meeting Canvas</h1>
+
+  <!-- TOP DECK: Agent Robot Avatar & Minimal Controls ONLY -->
+  <header class="top-deck">
+    <div class="agent-identity">
+      <!-- Animated Character Avatar Widget -->
+      <div id="character-wrapper" class="character-wrapper">
+        <svg id="char-svg" viewBox="0 0 60 60" class="char-svg">
+          <!-- Head Base & Ears -->
+          <rect x="8" y="10" width="44" height="40" rx="12" fill="#090d16" stroke="#06b6d4" stroke-width="2" id="char-head-border" />
+          <rect x="4" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-l" />
+          <rect x="52" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-r" />
+          <rect x="14" y="18" width="32" height="18" rx="6" fill="#000000" id="char-visor" />
+
+          <!-- Eye State 1: Listening (Cyan Pulsing Bars) -->
+          <g id="char-eyes-listening">
+            <rect x="19" y="24" width="8" height="4" rx="2" fill="#06b6d4">
+              <animate attributeName="opacity" values="0.4;1;0.4" dur="1.8s" repeatCount="indefinite" />
+            </rect>
+            <rect x="33" y="24" width="8" height="4" rx="2" fill="#06b6d4">
+              <animate attributeName="opacity" values="0.4;1;0.4" dur="1.8s" repeatCount="indefinite" />
+            </rect>
+          </g>
+
+          <!-- Eye State 2: Thinking (Purple Spinning Rings) -->
+          <g id="char-eyes-thinking" class="hidden">
+            <circle cx="23" cy="26" r="4" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="4" style="animation: spin-slow 1s linear infinite; transform-origin: 23px 26px;" />
+            <circle cx="37" cy="26" r="4" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="4" style="animation: spin-slow 1s linear infinite; transform-origin: 37px 26px;" />
+          </g>
+
+          <!-- Eye State 3: Speaking (Emerald Curved Smile Wave) -->
+          <g id="char-eyes-speaking" class="hidden">
+            <path d="M 18 27 Q 23 21 28 27" stroke="#34d399" stroke-width="2.5" fill="none" stroke-linecap="round" />
+            <path d="M 32 27 Q 37 21 42 27" stroke="#34d399" stroke-width="2.5" fill="none" stroke-linecap="round" />
+          </g>
+
+          <!-- Eye State 4: Alert / Contradiction (Red Alert Dots & Warning Lines) -->
+          <g id="char-eyes-alert" class="hidden">
+            <circle cx="23" cy="26" r="3.5" fill="#ef4444" />
+            <circle cx="37" cy="26" r="3.5" fill="#ef4444" />
+            <line x1="23" y1="19" x2="23" y2="21" stroke="#ef4444" stroke-width="2" />
+            <line x1="37" y1="19" x2="37" y2="21" stroke="#ef4444" stroke-width="2" />
+          </g>
+
+          <!-- Animated Mouth Bar -->
+          <g id="char-mouth-group">
+            <rect id="char-mouth-bar" x="25" y="40" width="10" height="3" rx="1.5" fill="#06b6d4" class="transition-all duration-200" />
+          </g>
+        </svg>
+
+        <!-- Forehead Gem -->
+        <div id="char-forehead-gem" style="position: absolute; top: 3px; left: 50%; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 50%; background: #22d3ee; box-shadow: 0 0 6px #22d3ee;"></div>
+      </div>
+
+      <!-- Agent Title & Live Speech Bubble -->
+      <div class="agent-meta">
+        <div class="agent-header-row">
+          <h1 class="agent-title">AEGIS // MEETING CO-PILOT</h1>
+          <span id="char-speech-bubble" class="speech-bubble">"Listening to meeting audio..."</span>
+        </div>
+        <p class="agent-subtext" id="agent-subtext">Google ADK • Gemini Reasoning • Nano Banana Visuals • Real-time TTS</p>
+      </div>
     </div>
-    <div class="header-controls">
+
+    <!-- Controls: Status Pill, Mic Button, and Manual Text Input ONLY -->
+    <div class="controls-deck">
       <div class="status-pill">
         <span class="status-dot" id="ws-dot"></span>
         <span id="ws-status">Connecting...</span>
       </div>
-      <button class="btn btn-secondary" id="illustrate-btn" title="Generate Nano Banana illustration for flow steps">🎨 Illustrate</button>
-      <button class="btn btn-secondary" id="undo-btn" title="Undo last block">↩️ Undo</button>
-      <button class="btn btn-secondary" id="clear-btn" title="Clear all canvas blocks">🗑️ Clear</button>
-      <button class="btn btn-primary" id="mic-btn">
+
+      <button class="mic-btn" id="mic-btn" title="Toggle audio recording">
         <span id="mic-icon">🎙️</span>
-        <span id="mic-text">Start Mic</span>
+        <span id="mic-text">Mic: Passive</span>
       </button>
+
+      <div class="text-input-wrap">
+        <input type="text" id="manual-text" class="text-input" placeholder="Speak or test turn here..." autocomplete="off">
+        <button id="send-manual-btn" class="send-btn">Send</button>
+      </div>
     </div>
   </header>
 
-  <!-- Contradiction Banner (Section 7) -->
-  <div id="contradiction-banner" style="display: none; background: #7f1d1d; border-bottom: 2px solid #ef4444; padding: 0.75rem 1.5rem; color: #fee2e2; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center;">
-    <div>
-      <strong>⚠️ Contradiction Detected:</strong> <span id="contradiction-text"></span>
-    </div>
-    <button id="dismiss-contradiction" style="background: transparent; border: 1px solid #fca5a5; color: #fee2e2; border-radius: 4px; padding: 2px 8px; cursor: pointer;">Dismiss</button>
-  </div>
-
-  <section class="transcript-section">
-    <div class="transcript-header">
-      <span>Live Hearing Stream</span>
-      <span id="stt-status">Ready</span>
-    </div>
-    <div class="transcript-box" id="transcript-box">
-      <span class="transcript-final" id="transcript-final"></span><span class="transcript-interim" id="transcript-interim"></span>
-    </div>
-    <div class="test-input-row" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
-      <input type="text" id="manual-text" placeholder="Or test here: 'First take notes, then show to client', 'Illustrate Take Notes', or click 🎨 Illustrate..." style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-main); font-size: 0.9rem;">
-      <button class="btn btn-secondary" id="send-manual-btn" style="white-space: nowrap;">Send Turn</button>
-    </div>
-  </section>
-
-  <main>
-    <div class="canvas-header">
-      <h2 class="canvas-title">Meeting Canvas</h2>
-      <div id="canvas-stats" style="font-size: 0.85rem; color: var(--text-muted);">0 blocks</div>
-    </div>
-    <div class="canvas-stack" id="canvas-stack">
-      <div class="canvas-empty" id="canvas-empty">
-        <h3>Live Canvas is Listening</h3>
-        <p>Speak naturally about processes, decisions, or action items. The assistant updates the canvas beside you.</p>
-        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">
-          Try: <em>"First we take notes, then we show them to the client, then we make decisions"</em><br>
-          Then click <strong>🎨 Illustrate</strong> to generate <strong>Nano Banana</strong> icons inside the process steps!
-        </p>
+  <!-- BOTTOM: THE ONE BIG NEON SQUARE (四角形) -->
+  <main class="neon-square-container">
+    <div id="neon-square-frame" class="neon-square-frame">
+      
+      <!-- Frame Top Navigation / Active Visual Status -->
+      <div class="neon-square-header">
+        <div class="neon-title-group">
+          <span class="neon-pulse-dot" id="neon-header-dot"></span>
+          <span id="active-visual-title" class="active-visual-title">NEON VISUAL CANVAS</span>
+          <span id="active-visual-badge" class="active-visual-badge">STANDBY</span>
+        </div>
+        <div id="visual-tabs" class="visual-tabs">
+          <!-- Dynamic tabs for switching visuals when multiple exist -->
+        </div>
       </div>
+
+      <!-- Single Visual Viewport -->
+      <div class="neon-square-viewport" id="neon-square-viewport">
+        
+        <!-- Standby State: Sleek Sci-Fi Radar Graphic -->
+        <div id="neon-standby" class="neon-standby">
+          <div class="standby-radar">
+            <div class="standby-radar-core"></div>
+          </div>
+          <h2 class="standby-title">NEON CANVAS // WAITING FOR MEETING VISUALS</h2>
+          <p class="standby-desc">
+            Passively listening to the meeting. When a workflow, comparison, decision, or explanation is discussed,
+            <strong>AEGIS autonomously renders the diagram, Nano Banana illustration, or table inside this neon square</strong>.
+          </p>
+          <div class="standby-suggestions">
+            Try saying: <em>"First we take notes, then we show them to the client, then we make decisions"</em> or <em>"Illustrate Take Notes"</em>
+          </div>
+        </div>
+
+        <!-- Dynamic Content (Flow Diagrams, Nano Banana Images, Tables, Answers) -->
+        <div id="neon-canvas-content" class="neon-canvas-content hidden"></div>
+
+      </div>
+
     </div>
   </main>
 

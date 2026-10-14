@@ -1,6 +1,11 @@
 /**
- * Live Meeting Assistant Frontend Client
- * Handles AudioWorklet 16kHz PCM streaming, live hearing box, interactive canvas, and TTS.
+ * AEGIS Live AI Meeting Assistant Client
+ * Features:
+ * - Reactive Robot Avatar with 4 dynamic states (Listening, Thinking, Speaking, Alert)
+ * - Single Big Neon Square (四角形) Viewport for all generated visuals
+ * - Autonomous Nano Banana & Shape Rendering (Flow, Compare, Checklist, Answer)
+ * - Speak-Over Contradiction Interruptions & Real-Time TTS
+ * - AudioWorklet 16kHz PCM Live Microphone Streaming
  */
 
 let ws = null;
@@ -9,29 +14,83 @@ let mediaStream = null;
 let pcmNode = null;
 let isRecording = false;
 
+// Store blocks locally: block_id -> block object
+const blocksStore = new Map();
+let activeBlockId = null;
+
 // DOM Elements
+const charWrapper = document.getElementById('character-wrapper');
+const eyesListening = document.getElementById('char-eyes-listening');
+const eyesThinking = document.getElementById('char-eyes-thinking');
+const eyesSpeaking = document.getElementById('char-eyes-speaking');
+const eyesAlert = document.getElementById('char-eyes-alert');
+const mouthBar = document.getElementById('char-mouth-bar');
+const speechBubble = document.getElementById('char-speech-bubble');
 const wsDot = document.getElementById('ws-dot');
 const wsStatus = document.getElementById('ws-status');
 const micBtn = document.getElementById('mic-btn');
 const micIcon = document.getElementById('mic-icon');
 const micText = document.getElementById('mic-text');
-const undoBtn = document.getElementById('undo-btn');
-const clearBtn = document.getElementById('clear-btn');
-const illustrateBtn = document.getElementById('illustrate-btn');
-const sttStatus = document.getElementById('stt-status');
-const transcriptBox = document.getElementById('transcript-box');
-const transcriptFinal = document.getElementById('transcript-final');
-const transcriptInterim = document.getElementById('transcript-interim');
-const canvasStack = document.getElementById('canvas-stack');
-const canvasEmpty = document.getElementById('canvas-empty');
-const canvasStats = document.getElementById('canvas-stats');
-const contradictionBanner = document.getElementById('contradiction-banner');
-const contradictionText = document.getElementById('contradiction-text');
-const dismissContradiction = document.getElementById('dismiss-contradiction');
 const manualTextInput = document.getElementById('manual-text');
 const sendManualBtn = document.getElementById('send-manual-btn');
 
-// Connect WebSocket
+// Neon Square Elements
+const neonSquareFrame = document.getElementById('neon-square-frame');
+const activeVisualTitle = document.getElementById('active-visual-title');
+const activeVisualBadge = document.getElementById('active-visual-badge');
+const visualTabs = document.getElementById('visual-tabs');
+const neonStandby = document.getElementById('neon-standby');
+const neonCanvasContent = document.getElementById('neon-canvas-content');
+
+// =========================================================================
+// Reactive Character Avatar States
+// =========================================================================
+
+function setAvatarState(state) {
+  // state: 'listening' | 'thinking' | 'speaking' | 'alert'
+  eyesListening.classList.add('hidden');
+  eyesThinking.classList.add('hidden');
+  eyesSpeaking.classList.add('hidden');
+  eyesAlert.classList.add('hidden');
+
+  charWrapper.classList.remove('thinking', 'speaking', 'alert');
+  neonSquareFrame.classList.remove('thinking', 'speaking', 'alert');
+  mouthBar.classList.remove('speaking-mouth');
+  speechBubble.classList.remove('thinking', 'speaking', 'alert');
+
+  if (state === 'thinking') {
+    eyesThinking.classList.remove('hidden');
+    charWrapper.classList.add('thinking');
+    neonSquareFrame.classList.add('thinking');
+    speechBubble.classList.add('thinking');
+  } else if (state === 'speaking') {
+    eyesSpeaking.classList.remove('hidden');
+    charWrapper.classList.add('speaking');
+    neonSquareFrame.classList.add('speaking');
+    mouthBar.classList.add('speaking-mouth');
+    speechBubble.classList.add('speaking');
+  } else if (state === 'alert') {
+    eyesAlert.classList.remove('hidden');
+    charWrapper.classList.add('alert');
+    neonSquareFrame.classList.add('alert');
+    speechBubble.classList.add('alert');
+  } else {
+    // Default: 'listening'
+    eyesListening.classList.remove('hidden');
+  }
+}
+
+function setSpeechBubble(text, mode = '') {
+  speechBubble.textContent = text ? `"${text}"` : '"Listening to meeting audio..."';
+  if (mode) {
+    speechBubble.className = `speech-bubble ${mode}`;
+  }
+}
+
+// =========================================================================
+// WebSocket Connection & Dispatcher
+// =========================================================================
+
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const wsUrl = `${protocol}//${window.location.host}/ws`;
@@ -42,7 +101,7 @@ function connectWebSocket() {
   ws.onopen = () => {
     wsDot.className = 'status-dot active';
     wsStatus.textContent = 'Connected';
-    console.log('[WS] Connected to meeting backend');
+    console.log('[WS] Connected to AEGIS meeting engine');
   };
 
   ws.onmessage = (event) => {
@@ -50,14 +109,14 @@ function connectWebSocket() {
       const msg = JSON.parse(event.data);
       handleServerMessage(msg);
     } catch (err) {
-      console.error('[WS] Failed to parse message:', err);
+      console.error('[WS] Parse error:', err);
     }
   };
 
   ws.onclose = () => {
     wsDot.className = 'status-dot';
     wsStatus.textContent = 'Disconnected';
-    console.log('[WS] Disconnected, retrying in 2s...');
+    console.log('[WS] Disconnected, reconnecting in 2s...');
     setTimeout(connectWebSocket, 2000);
   };
 
@@ -66,48 +125,61 @@ function connectWebSocket() {
   };
 }
 
-// Handle Server Messages
 function handleServerMessage(msg) {
   if (msg.type === 'transcript') {
     if (msg.is_final) {
-      transcriptFinal.textContent += (transcriptFinal.textContent ? ' ' : '') + msg.text;
-      transcriptInterim.textContent = '';
-    } else {
-      transcriptInterim.textContent = ' ' + msg.text;
+      setAvatarState('thinking');
+      setSpeechBubble(`Processed: ${msg.text.slice(0, 45)}...`, 'thinking');
     }
-    transcriptBox.scrollTop = transcriptBox.scrollHeight;
   } else if (msg.type === 'status') {
-    sttStatus.textContent = msg.status;
+    wsStatus.textContent = msg.status || 'Active';
   } else if (msg.type === 'block_upsert') {
-    renderOrUpdateBlock(msg.block);
-    // Remove pending pulse from any clicked elements
-    document.querySelectorAll('[data-ref].pending').forEach(el => el.classList.remove('pending'));
+    storeAndRenderBlock(msg.block);
+    // Return to listening unless currently speaking audio
+    if (!mouthBar.classList.contains('speaking-mouth')) {
+      setAvatarState('listening');
+    }
   } else if (msg.type === 'block_remove') {
     removeBlock(msg.block_id);
   } else if (msg.type === 'canvas_cleared') {
-    canvasStack.innerHTML = '';
-    if (canvasEmpty) {
-      canvasEmpty.style.display = 'block';
-      canvasStack.appendChild(canvasEmpty);
-    }
-    updateStats();
+    blocksStore.clear();
+    activeBlockId = null;
+    renderNeonSquare();
   } else if (msg.type === 'speak') {
+    setAvatarState('speaking');
+    setSpeechBubble(msg.text, 'speaking');
     if (msg.audio) {
-      playAudio(msg.audio);
+      playAudio(msg.audio, () => {
+        setAvatarState('listening');
+        setSpeechBubble('Listening to meeting audio...');
+      });
+    } else {
+      setTimeout(() => {
+        setAvatarState('listening');
+        setSpeechBubble('Listening to meeting audio...');
+      }, 3500);
     }
   } else if (msg.type === 'contradiction') {
-    if (contradictionBanner && contradictionText) {
-      contradictionText.textContent = msg.question || `${msg.earlier} vs ${msg.now}`;
-      contradictionBanner.style.display = 'flex';
-    }
+    // SPEAKS OVER IMMEDIATELY ON CONTRADICTION
+    setAvatarState('alert');
+    const warningText = msg.question || `Contradiction: ${msg.earlier} vs ${msg.now}`;
+    setSpeechBubble(`⚠️ ${warningText}`, 'alert');
     if (msg.audio) {
-      playAudio(msg.audio);
+      playAudio(msg.audio, () => {
+        setTimeout(() => {
+          setAvatarState('listening');
+          setSpeechBubble('Listening to meeting audio...');
+        }, 1500);
+      });
     }
   }
 }
 
-// Audio Player with Echo Suppression Notification
-function playAudio(base64Audio) {
+// =========================================================================
+// Audio Player (TTS & Speak-Over)
+// =========================================================================
+
+function playAudio(base64Audio, onEndCallback) {
   try {
     const audio = new Audio('data:audio/mp3;base64,' + base64Audio);
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -117,20 +189,121 @@ function playAudio(base64Audio) {
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'tts_playing', playing: false }));
       }
+      if (onEndCallback) onEndCallback();
     };
-    audio.play().catch(e => console.warn('Audio play auto-block:', e));
+    audio.play().catch(e => {
+      console.warn('Audio auto-play blocked, click page to enable audio:', e);
+      if (onEndCallback) setTimeout(onEndCallback, 3000);
+    });
   } catch (e) {
-    console.warn('Audio play failed:', e);
+    console.warn('Audio playback error:', e);
+    if (onEndCallback) onEndCallback();
   }
 }
 
-// Start Microphone & AudioWorklet (16kHz LINEAR16 PCM)
+// =========================================================================
+// Visual Store & Neon Square (四角形) Rendering
+// =========================================================================
+
+function storeAndRenderBlock(block) {
+  blocksStore.set(block.id, block);
+  activeBlockId = block.id; // Switch active view to the newest/updated block
+  renderNeonSquare();
+}
+
+function removeBlock(blockId) {
+  blocksStore.delete(blockId);
+  if (activeBlockId === blockId) {
+    const remaining = Array.from(blocksStore.keys());
+    activeBlockId = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+  }
+  renderNeonSquare();
+}
+
+function renderNeonSquare() {
+  if (blocksStore.size === 0 || !activeBlockId) {
+    neonStandby.classList.remove('hidden');
+    neonCanvasContent.classList.add('hidden');
+    neonCanvasContent.innerHTML = '';
+    activeVisualTitle.textContent = 'NEON VISUAL CANVAS';
+    activeVisualBadge.textContent = 'STANDBY';
+    visualTabs.innerHTML = '';
+    return;
+  }
+
+  neonStandby.classList.add('hidden');
+  neonCanvasContent.classList.remove('hidden');
+
+  const currentBlock = blocksStore.get(activeBlockId);
+  if (!currentBlock) return;
+
+  // Header update
+  activeVisualTitle.textContent = currentBlock.title || currentBlock.kind.toUpperCase();
+  const kindBadge = currentBlock.kind === 'flow' ? 'FLOW // NANO BANANA' : currentBlock.kind.toUpperCase();
+  activeVisualBadge.textContent = kindBadge;
+
+  // Render Tabs if more than 1 block exists
+  renderTabs();
+
+  // Render HTML / SVG content directly inside the single Neon Square
+  neonCanvasContent.innerHTML = currentBlock.html || '';
+}
+
+function renderTabs() {
+  visualTabs.innerHTML = '';
+  if (blocksStore.size <= 1) return;
+
+  blocksStore.forEach((block, id) => {
+    const tab = document.createElement('button');
+    tab.className = `visual-tab-pill ${id === activeBlockId ? 'active' : ''}`;
+    tab.textContent = block.title || block.kind;
+    tab.onclick = () => {
+      activeBlockId = id;
+      renderNeonSquare();
+    };
+    visualTabs.appendChild(tab);
+  });
+}
+
+// =========================================================================
+// Interactive Click / Drill-In Listener
+// =========================================================================
+
+neonCanvasContent.addEventListener('click', (event) => {
+  const refElem = event.target.closest('[data-ref]');
+  if (!refElem || !activeBlockId) return;
+
+  const ref = refElem.getAttribute('data-ref');
+  refElem.classList.add('pending');
+
+  if (ref.startsWith('item:')) {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'toggle_item',
+        block_id: activeBlockId,
+        ref: ref,
+      }));
+    }
+  } else {
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'inspect',
+        block_id: activeBlockId,
+        ref: ref,
+      }));
+    }
+  }
+});
+
+// =========================================================================
+// Audio Recording & AudioWorklet Streaming (16kHz PCM)
+// =========================================================================
+
 let speechRec = null;
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 async function startRecording() {
   try {
-    sttStatus.textContent = 'Initializing mic...';
     mediaStream = await navigator.mediaDevices.getUserMedia({
       audio: {
         channelCount: 1,
@@ -172,7 +345,8 @@ async function startRecording() {
           if (res.isFinal) {
             const text = res[0].transcript.trim();
             if (text) {
-              appendFinalTranscript(text);
+              setAvatarState('thinking');
+              setSpeechBubble(`Heard: "${text}"`, 'thinking');
               if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true }));
               }
@@ -181,8 +355,10 @@ async function startRecording() {
             interim += res[0].transcript;
           }
         }
-        transcriptInterim.textContent = interim ? ' ' + interim : '';
-        transcriptBox.scrollTop = transcriptBox.scrollHeight;
+        if (interim) {
+          setAvatarState('listening');
+          setSpeechBubble(`Listening: "${interim.slice(-35)}"`, 'listening');
+        }
       };
 
       speechRec.onerror = (e) => console.warn('[SpeechRec] Event:', e.error);
@@ -195,30 +371,23 @@ async function startRecording() {
       try {
         speechRec.start();
       } catch (err) {
-        console.warn('[SpeechRec] Could not start:', err);
+        console.warn('[SpeechRec] Start error:', err);
       }
     }
 
     isRecording = true;
     micBtn.classList.add('recording');
     micIcon.textContent = '⏹️';
-    micText.textContent = 'Pause Mic';
+    micText.textContent = 'Mic: Listening';
     wsDot.className = 'status-dot listening';
-    sttStatus.textContent = 'Listening (16kHz PCM Live)...';
+    setAvatarState('listening');
+    setSpeechBubble('Listening to meeting audio...');
   } catch (err) {
     console.error('[Mic] Error accessing microphone:', err);
-    sttStatus.textContent = 'Mic Error: ' + err.message;
     alert('Microphone access error: ' + err.message);
   }
 }
 
-function appendFinalTranscript(text) {
-  transcriptFinal.textContent += (transcriptFinal.textContent ? ' ' : '') + text;
-  transcriptInterim.textContent = '';
-  transcriptBox.scrollTop = transcriptBox.scrollHeight;
-}
-
-// Stop Microphone
 async function stopRecording() {
   isRecording = false;
   if (speechRec) {
@@ -235,9 +404,10 @@ async function stopRecording() {
   }
   micBtn.classList.remove('recording');
   micIcon.textContent = '🎙️';
-  micText.textContent = 'Start Mic';
+  micText.textContent = 'Mic: Passive';
   wsDot.className = 'status-dot active';
-  sttStatus.textContent = 'Paused';
+  setAvatarState('listening');
+  setSpeechBubble('Mic paused. Ready for speech or input.');
 }
 
 micBtn.addEventListener('click', () => {
@@ -248,156 +418,17 @@ micBtn.addEventListener('click', () => {
   }
 });
 
-// Section 6b & 8: Delegated click listener on the canvas
-canvasStack.addEventListener('click', (event) => {
-  // Check if Nano Banana illustrate button clicked
-  const illBtn = event.target.closest('.btn-illustrate');
-  if (illBtn) {
-    event.stopPropagation();
-    const blockId = illBtn.getAttribute('data-block-id');
-    illBtn.textContent = '🎨 Generating Icon...';
-    illBtn.disabled = true;
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'command',
-        name: 'illustrate_step',
-        args: { block_id: blockId }
-      }));
-    }
-    return;
-  }
+// =========================================================================
+// Manual Input / Test Dispatcher
+// =========================================================================
 
-  const refElem = event.target.closest('[data-ref]');
-  if (!refElem) return;
-
-  const blockElem = refElem.closest('.canvas-block');
-  if (!blockElem) return;
-
-  const blockId = blockElem.getAttribute('data-block-id');
-  const ref = refElem.getAttribute('data-ref');
-
-  // Immediate pending feedback (Section 6b rule)
-  refElem.classList.add('pending');
-
-  if (ref.startsWith('item:')) {
-    // Checklist toggle
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'toggle_item',
-        block_id: blockId,
-        ref: ref,
-      }));
-    }
-  } else {
-    // Drill in / inspect
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'inspect',
-        block_id: blockId,
-        ref: ref,
-      }));
-    }
-  }
-});
-
-// Block rendering & DOM placement
-function renderOrUpdateBlock(block) {
-  if (canvasEmpty) {
-    canvasEmpty.style.display = 'none';
-  }
-
-  let blockElem = document.querySelector(`.canvas-block[data-block-id="${block.id}"]`);
-  const isNew = !blockElem;
-
-  if (isNew) {
-    blockElem = document.createElement('div');
-    blockElem.className = 'canvas-block';
-    blockElem.setAttribute('data-block-id', block.id);
-
-    if (block.parent && block.parent.block_id) {
-      blockElem.setAttribute('data-parent-id', block.parent.block_id);
-      blockElem.classList.add('attached-child');
-
-      // Place child attached immediately beneath its source block
-      const parentElem = document.querySelector(`.canvas-block[data-block-id="${block.parent.block_id}"]`);
-      if (parentElem && parentElem.nextSibling) {
-        canvasStack.insertBefore(blockElem, parentElem.nextSibling);
-      } else {
-        canvasStack.appendChild(blockElem);
-      }
-    } else {
-      canvasStack.appendChild(blockElem);
-    }
-  }
-
-  const illustrateBtnHtml = block.kind === 'flow'
-    ? `<button class="btn btn-secondary btn-illustrate" data-block-id="${block.id}" style="font-size:0.75rem; padding: 3px 8px; margin-left: auto; margin-right: 8px; cursor: pointer; border-radius: 4px; background: #1e293b; border: 1px solid #38bdf8; color: #38bdf8;">🎨 Illustrate (Nano Banana)</button>`
-    : '';
-
-  blockElem.innerHTML = `
-    <div class="block-top" style="display: flex; align-items: center;">
-      <span class="block-title">${block.title || 'Block'}</span>
-      ${illustrateBtnHtml}
-      <span class="block-kind-badge">${block.kind}</span>
-    </div>
-    <div class="block-content">${block.html || ''}</div>
-  `;
-
-  updateStats();
-}
-
-function removeBlock(blockId) {
-  const blockElem = document.querySelector(`.canvas-block[data-block-id="${blockId}"]`);
-  if (blockElem) {
-    blockElem.remove();
-  }
-  updateStats();
-}
-
-function updateStats() {
-  const count = document.querySelectorAll('.canvas-block').length;
-  if (canvasStats) {
-    canvasStats.textContent = `${count} block${count === 1 ? '' : 's'}`;
-  }
-  if (count === 0 && canvasEmpty) {
-    canvasEmpty.style.display = 'block';
-  }
-}
-
-// Undo and Clear buttons
-undoBtn.addEventListener('click', () => {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'command', name: 'undo' }));
-  }
-});
-
-clearBtn.addEventListener('click', () => {
-  if (confirm('Clear all blocks from the canvas?')) {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'command', name: 'clear' }));
-    }
-  }
-});
-
-if (illustrateBtn) {
-  illustrateBtn.addEventListener('click', () => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'command', name: 'illustrate_step', args: {} }));
-    }
-  });
-}
-
-if (dismissContradiction) {
-  dismissContradiction.addEventListener('click', () => {
-    contradictionBanner.style.display = 'none';
-  });
-}
-
-// Manual turn sender for testing
 function sendManualTurn() {
   const text = manualTextInput.value.trim();
   if (!text) return;
-  appendFinalTranscript(text);
+
+  setAvatarState('thinking');
+  setSpeechBubble(`Sent: "${text}"`, 'thinking');
+
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true }));
   }
@@ -411,6 +442,8 @@ manualTextInput.addEventListener('keydown', (e) => {
   }
 });
 
+// Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
   connectWebSocket();
+  setAvatarState('listening');
 });
