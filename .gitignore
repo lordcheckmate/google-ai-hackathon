@@ -1,6 +1,10 @@
 # Environment & secrets
 .env
-.env.local
+.env.*
+*.key
+*.json
+!cloudbuild.yaml
+!package.json
 
 # Python
 __pycache__/
@@ -21,7 +25,6 @@ backend/
 bot/
 extension/
 frontend/
-tests/
 *.bat
 *.vbs
 create_shortcut.ps1

@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Live AI Meeting Assistant</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <h1>Meeting Canvas</h1>
+    </div>
+    <div class="header-controls">
+      <div class="status-pill">
+        <span class="status-dot" id="ws-dot"></span>
+        <span id="ws-status">Connecting...</span>
+      </div>
+      <button class="btn btn-secondary" id="undo-btn" title="Undo last block">↩️ Undo</button>
+      <button class="btn btn-secondary" id="clear-btn" title="Clear all canvas blocks">🗑️ Clear</button>
+      <button class="btn btn-primary" id="mic-btn">
+        <span id="mic-icon">🎙️</span>
+        <span id="mic-text">Start Mic</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Contradiction Banner (Section 7) -->
+  <div id="contradiction-banner" style="display: none; background: #7f1d1d; border-bottom: 2px solid #ef4444; padding: 0.75rem 1.5rem; color: #fee2e2; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center;">
+    <div>
+      <strong>⚠️ Contradiction Detected:</strong> <span id="contradiction-text"></span>
+    </div>
+    <button id="dismiss-contradiction" style="background: transparent; border: 1px solid #fca5a5; color: #fee2e2; border-radius: 4px; padding: 2px 8px; cursor: pointer;">Dismiss</button>
+  </div>
+
+  <section class="transcript-section">
+    <div class="transcript-header">
+      <span>Live Hearing Stream</span>
+      <span id="stt-status">Ready</span>
+    </div>
+    <div class="transcript-box" id="transcript-box">
+      <span class="transcript-final" id="transcript-final"></span><span class="transcript-interim" id="transcript-interim"></span>
+    </div>
+    <div class="test-input-row" style="display: flex; gap: 0.5rem; margin-top: 0.5rem;">
+      <input type="text" id="manual-text" placeholder="Or test speak/command here: 'First take notes, then show to client, then make decisions'..." style="flex: 1; padding: 0.5rem 0.75rem; border-radius: 6px; background: var(--bg-surface); border: 1px solid var(--border-color); color: var(--text-main); font-size: 0.9rem;">
+      <button class="btn btn-secondary" id="send-manual-btn" style="white-space: nowrap;">Send Turn</button>
+    </div>
+  </section>
+
+  <main>
+    <div class="canvas-header">
+      <h2 class="canvas-title">Meeting Canvas</h2>
+      <div id="canvas-stats" style="font-size: 0.85rem; color: var(--text-muted);">0 blocks</div>
+    </div>
+    <div class="canvas-stack" id="canvas-stack">
+      <div class="canvas-empty" id="canvas-empty">
+        <h3>Live Canvas is Listening</h3>
+        <p>Speak naturally about processes, decisions, or action items. The assistant updates the canvas beside you.</p>
+        <p style="margin-top: 0.5rem; font-size: 0.85rem; color: var(--text-muted);">Try: <em>"First we take notes, then we show them to the client, then we make decisions"</em></p>
+      </div>
+    </div>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
