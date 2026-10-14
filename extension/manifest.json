@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Project A.E.G.I.S. - AI Meeting Copilot",
+  "version": "1.0.0",
+  "description": "Autonomous AI Hearing & Visual Meeting Copilot for Google Meet powered by Gemini 3.8 & Nano Banana.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://meet.google.com/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*",
+    "https://*.run.app/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "AEGIS Copilot Controls"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

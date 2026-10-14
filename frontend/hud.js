@@ -457,6 +457,71 @@ async function toggleMicrophone() {
   }
 }
 
+let tabStream = null;
+let isTabCapturing = false;
+
+async function toggleTabAudioCapture() {
+  const btn = document.getElementById('tab-audio-btn');
+  const text = document.getElementById('tab-audio-text');
+  const btnTop = document.getElementById('tab-audio-btn-top');
+  const textTop = document.getElementById('tab-audio-text-top');
+
+  if (isTabCapturing) {
+    if (tabStream) {
+      tabStream.getTracks().forEach(t => t.stop());
+      tabStream = null;
+    }
+    isTabCapturing = false;
+    if (text) text.innerText = 'Tab Audio: Off';
+    if (btn) btn.className = 'px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-300 flex items-center gap-1.5 transition-all';
+    if (textTop) textTop.innerText = '1. Capture Meeting Tab (Instant)';
+    if (btnTop) btnTop.className = 'px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black font-bold whitespace-nowrap transition-all shadow-[0_0_12px_rgba(16,185,129,0.4)] flex items-center gap-2';
+    updateCharacterState('listening', 'Stopped listening to meeting tab.');
+    return;
+  }
+
+  try {
+    tabStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
+    });
+
+    const audioTracks = tabStream.getAudioTracks();
+    if (audioTracks.length === 0) {
+      alert("⚠️ Note: Please make sure to check 'Also share tab audio' in Chrome's tab picker so AEGIS can hear the meeting audio!");
+      tabStream.getTracks().forEach(t => t.stop());
+      tabStream = null;
+      return;
+    }
+
+    isTabCapturing = true;
+    if (text) text.innerText = '● Tab Audio: Live';
+    if (btn) btn.className = 'px-3 py-1 bg-emerald-950/60 border border-emerald-400 rounded text-emerald-200 flex items-center gap-1.5 animate-pulse shadow-[0_0_12px_rgba(16,185,129,0.4)]';
+    if (textTop) textTop.innerText = '✓ Capturing Meet Tab Audio';
+    if (btnTop) btnTop.className = 'px-3.5 py-1.5 rounded-lg bg-emerald-400 text-black font-bold whitespace-nowrap transition-all shadow-[0_0_15px_rgba(16,185,129,0.6)] flex items-center gap-2';
+    
+    updateCharacterState('listening', 'Directly listening to Google Meet tab audio!');
+
+    if (!recognition) initSpeechRecognition();
+    try { recognition.start(); } catch(e) {}
+
+    audioTracks[0].onended = () => {
+      isTabCapturing = false;
+      if (text) text.innerText = 'Tab Audio: Off';
+      if (btn) btn.className = 'px-3 py-1 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 rounded text-zinc-300 flex items-center gap-1.5 transition-all';
+      if (textTop) textTop.innerText = '1. Capture Meeting Tab (Instant)';
+      if (btnTop) btnTop.className = 'px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-black font-bold whitespace-nowrap transition-all shadow-[0_0_12px_rgba(16,185,129,0.4)] flex items-center gap-2';
+      updateCharacterState('listening', 'Meeting tab audio ended.');
+    };
+  } catch (err) {
+    console.warn("Tab capture canceled:", err);
+  }
+}
+
 // Google Meet Integration Handlers
 async function connectGoogleAccount() {
   updateCharacterState('thinking', 'Opening Google login window...');
