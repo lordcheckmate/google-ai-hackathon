@@ -57,6 +57,8 @@ class AnswerBlock(BaseModel):
     question: str
     answer: str
     detail: Optional[str] = None
+    image_url: Optional[str] = None
+    visual_caption: Optional[str] = None
     sources: List[AnswerSource] = Field(default_factory=list)
     confidence: Literal["high", "medium", "low"] = "high"
 

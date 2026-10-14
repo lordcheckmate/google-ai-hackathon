@@ -73,6 +73,13 @@ def generate_block_json(
 
             if response.text:
                 parsed = json.loads(response.text)
+                if kind == "answer" and not parsed.get("image_url"):
+                    from app.images import generate_step_image
+                    q = parsed.get("question", instruction)
+                    a = parsed.get("answer", "")
+                    parsed["image_url"] = generate_step_image(q[:40], f"Diagram illustrating {a[:80]}")
+                    if not parsed.get("visual_caption"):
+                        parsed["visual_caption"] = a
                 # Validate against schema
                 validated = schema_cls.model_validate(parsed)
                 return validated.model_dump(by_alias=True)
@@ -158,12 +165,17 @@ def fallback_block_synthesizer(
         ).model_dump(by_alias=True)
 
     elif kind == "answer":
+        from app.images import generate_step_image
+        q = instruction[:50].capitalize()
+        img_url = generate_step_image(q, f"Schematic diagram illustrating {instruction}")
         return AnswerBlock(
             kind="answer",
-            question="What was discussed?",
+            question=q if "?" in q else f"Explanation: {q}",
             answer=instruction,
+            image_url=img_url,
+            visual_caption=instruction,
             confidence="high",
-            sources=[{"title": "Meeting Transcript", "url": "#"}],
+            sources=[{"title": "Meeting Transcript & Live Visual", "url": "#"}],
         ).model_dump(by_alias=True)
 
     elif kind == "checklist":

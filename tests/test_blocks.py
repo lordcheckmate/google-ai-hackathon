@@ -48,12 +48,16 @@ def test_answer():
         question='What is the timeout on Cloud Run?',
         answer='Cloud Run supports request timeouts up to 3600 seconds.',
         detail='Recommended for long-running WebSockets.',
+        image_url='/img/test_visual.png',
+        visual_caption='Cloud Run supports request timeouts up to 3600 seconds with WebSockets.',
         sources=[{'title': 'Cloud Run Docs', 'url': 'https://cloud.google.com/run'}],
         confidence='high'
     )
     html_ans = render_answer(ans_data)
     assert 'data-ref="src:0"' in html_ans
     assert 'confidence-high' in html_ans
+    assert '/img/test_visual.png' in html_ans
+    assert 'CAPTION &amp; EXPLANATION' in html_ans or 'CAPTION & EXPLANATION' in html_ans
     desc, kind = resolve_ref_element('answer', ans_data.model_dump(), 'src:0')
     assert 'Cloud Run Docs' in desc
     print('Answer test passed')

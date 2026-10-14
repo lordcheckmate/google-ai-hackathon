@@ -52,14 +52,53 @@ def render_answer(data: Any) -> str:
             f'</div>'
         )
 
+    visual_html = ""
+    if block.image_url:
+        visual_html = (
+            f'<div class="answer-visual-wrapper" style="display:flex; justify-content:center; align-items:center; '
+            f'margin:1rem 0; padding:1.25rem; background:#000; border:1px solid rgba(6,182,212,0.3); '
+            f'border-radius:12px; box-shadow:0 0 20px rgba(6,182,212,0.15);">'
+            f'<img src="{html.escape(block.image_url)}" alt="Visual Explanation" style="max-height:180px; max-width:100%; object-fit:contain; border-radius:8px;" />'
+            f'</div>'
+        )
+    else:
+        # Crisp schematic diagram vector fallback
+        visual_html = (
+            f'<div class="answer-visual-wrapper" style="display:flex; justify-content:center; align-items:center; '
+            f'margin:1rem 0; padding:1.25rem; background:#000; border:1px solid rgba(6,182,212,0.3); '
+            f'border-radius:12px; box-shadow:0 0 20px rgba(6,182,212,0.15);">'
+            f'<svg viewBox="0 0 320 100" width="320" height="100" style="max-width:100%; height:auto;">'
+            f'  <defs>'
+            f'    <marker id="ans-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
+            f'      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#06b6d4" />'
+            f'    </marker>'
+            f'  </defs>'
+            f'  <rect x="15" y="25" width="90" height="50" rx="8" fill="#0b1324" stroke="#06b6d4" stroke-width="2"/>'
+            f'  <text x="60" y="55" fill="#f8fafc" font-size="11" text-anchor="middle" font-family="sans-serif">Question</text>'
+            f'  <path d="M 105 50 L 155 50" fill="none" stroke="#06b6d4" stroke-width="2" marker-end="url(#ans-arr)"/>'
+            f'  <circle cx="210" cy="50" r="30" fill="#0b1324" stroke="#10b981" stroke-width="2"/>'
+            f'  <text x="210" y="54" fill="#34d399" font-size="11" text-anchor="middle" font-family="sans-serif">Solution</text>'
+            f'  <path d="M 240 50 L 290 50" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#ans-arr)"/>'
+            f'  <rect x="290" y="40" width="20" height="20" rx="4" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>'
+            f'</svg>'
+            f'</div>'
+        )
+
+    caption_text = block.visual_caption or block.answer
+
     return (
-        f'<div class="answer-card" style="padding:0.5rem 0;">'
-        f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.5rem;">'
-        f'<h4 style="font-size:1rem; color:#f8fafc; font-weight:600;">{html.escape(block.question)}</h4>'
+        f'<div class="answer-card" style="width:100%; max-width:760px; padding:0.5rem 0;">'
+        f'<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.75rem;">'
+        f'<h4 style="font-size:1.1rem; color:#f8fafc; font-weight:700; font-family:var(--font-mono, monospace);">{html.escape(block.question)}</h4>'
         f'{conf_badge}'
         f'</div>'
-        f'<p style="font-size:0.95rem; line-height:1.5; color:#e2e8f0;">{html.escape(block.answer)}</p>'
+        f'{visual_html}'
+        f'<div class="answer-caption-box" style="margin-top:0.75rem; padding:0.9rem 1.1rem; background:#080d17; border-left:3px solid #06b6d4; border-radius:0 8px 8px 0; border-top:1px solid #1e293b; border-right:1px solid #1e293b; border-bottom:1px solid #1e293b;">'
+        f'<div style="font-size:0.75rem; font-family:var(--font-mono, monospace); font-weight:800; color:#38bdf8; letter-spacing:0.08em; text-transform:uppercase; margin-bottom:0.35rem;">💡 CAPTION & EXPLANATION</div>'
+        f'<p style="font-size:0.95rem; line-height:1.6; color:#f1f5f9;">{html.escape(caption_text)}</p>'
         f'{detail_html}'
         f'{sources_html}'
         f'</div>'
+        f'</div>'
     )
+
