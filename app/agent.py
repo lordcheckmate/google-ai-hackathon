@@ -215,7 +215,7 @@ def illustrate_step(block_id: str, node_label: str, visual_description: str) -> 
     if not record or record.get("kind") != "flow":
         return {"status": "error", "message": f"Flow block {block_id} not found"}
 
-    img_url = generate_step_image(node_label, visual_description)
+    img_url = generate_step_image(node_label, visual_description, is_icon=True)
     block_json = record["json"]
 
     matched = False

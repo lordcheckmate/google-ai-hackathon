@@ -224,21 +224,23 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     if not nodes:
         return {"status": "error", "message": "Flow diagram contains no steps"}
 
-    # Find matching node, or pick the first node without an image
-    target_node = None
+    # If a specific node is requested, illustrate that node; otherwise illustrate all nodes!
     norm = node_label.strip().lower()
     if norm:
+        target_node = None
         for n in nodes:
             if norm in n.get("label", "").lower() or norm == n.get("id", "").lower():
                 target_node = n
                 break
-
-    if not target_node:
-        unillustrated = [n for n in nodes if not n.get("image_url")]
-        target_node = unillustrated[0] if unillustrated else nodes[0]
-
-    img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}")
-    target_node["image_url"] = img_url
+        if not target_node:
+            target_node = nodes[0]
+        img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}", is_icon=True)
+        target_node["image_url"] = img_url
+        illustrated_label = target_node["label"]
+    else:
+        for n in nodes:
+            n["image_url"] = generate_step_image(n["label"], f"Line icon for {n['label']}", is_icon=True)
+        illustrated_label = "all steps"
 
     markup = render_block("flow", block_json)
     save_block(sid, block_id, "flow", block_json, parent=target_block.get("parent"))
@@ -255,7 +257,7 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
         }
     })
 
-    return {"status": "ok", "block_id": block_id, "node": target_node["label"], "image_url": img_url}
+    return {"status": "ok", "block_id": block_id, "node": illustrated_label}
 
 
 async def handle_highlight(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:

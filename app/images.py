@@ -1,16 +1,23 @@
 """
-Image generation and storage for process step illustrations (Nano Banana).
-Prompts for flat, single-subject, monochrome-on-transparent line icons.
-Stores in GCS (or local cache) and proxies through /img/{id}.
+Image and diagram generation for process steps (Nano Banana) and visual explanations.
+Provides:
+- gemini-2.5-flash-lite powered custom visual diagrams
+- Semantic icon synthesizer for flow nodes (Notes, Client, Decision, Inspection, Deploy, etc.)
+- Math / Equation breakdown schematics
+- SVG Sanitization for total browser security
+- Proxies through /img/{id}
 """
 
 import os
+import re
 import uuid
+import time
+import html
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
 
-from app.models import IMAGE_MODEL
+from app.models import REASONING_MODEL
 
 logger = logging.getLogger("images")
 
@@ -32,17 +39,132 @@ def get_storage_client():
     return _storage_client
 
 
-def generate_step_image(node_label: str, visual_description: str, context: Optional[str] = None) -> str:
+def sanitize_svg(raw_svg: str) -> str:
     """
-    Generates a step illustration icon or contextual explanatory diagram.
-    Uses Gemini 2.5 Flash for custom SVG synthesis, with a smart dynamic fallback.
+    Strips scripts, event handlers, and unsafe constructs to guarantee SVG safety.
+    """
+    if not raw_svg:
+        return ""
+    # Strip script tags
+    cleaned = re.sub(r"(?is)<script.*?>.*?</script>", "", raw_svg)
+    # Strip on* event handlers (e.g. onload, onclick, onerror)
+    cleaned = re.sub(r"(?i)\s+on\w+\s*=\s*['\"][^'\"]*['\"]", "", cleaned)
+    cleaned = re.sub(r"(?i)\s+on\w+\s*=\s*[^>\s]+", "", cleaned)
+    # Strip javascript: and data: pseudo-protocols
+    cleaned = re.sub(r"(?i)href\s*=\s*['\"]javascript:[^'\"]*['\"]", 'href="#"', cleaned)
+    cleaned = re.sub(r"(?i)xlink:href\s*=\s*['\"]javascript:[^'\"]*['\"]", 'xlink:href="#"', cleaned)
+    # Strip foreignObject which could embed HTML
+    cleaned = re.sub(r"(?is)<foreignObject.*?>.*?</foreignObject>", "", cleaned)
+    return cleaned.strip()
+
+
+def build_semantic_step_icon(label: str) -> str:
+    """
+    Generates a unique, high-contrast, distinct 48x48 vector icon for flow diagram steps.
+    Never repeats generic templates; selects distinct geometry based on step semantics.
+    """
+    lbl = label.lower().strip()
+
+    # 1. Notes / Documentation / Writing
+    if any(k in lbl for k in ["note", "doc", "write", "record", "log", "summary", "memo"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <rect x="10" y="6" width="28" height="36" rx="4" fill="#0b172a" stroke="#06b6d4" stroke-width="2"/>
+  <line x1="16" y1="14" x2="26" y2="14" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+  <line x1="16" y1="20" x2="32" y2="20" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="16" y1="26" x2="30" y2="26" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="16" y1="32" x2="24" y2="32" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+  <circle cx="34" cy="34" r="5" fill="#06b6d4"/>
+  <path d="M 33 34 L 35 32" stroke="#000" stroke-width="1.5"/>
+</svg>'''
+
+    # 2. Client / User / Show / Customer / Present
+    elif any(k in lbl for k in ["client", "user", "customer", "show", "present", "stakeholder", "demo"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <rect x="6" y="8" width="36" height="26" rx="4" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
+  <circle cx="24" cy="18" r="5" fill="#34d399"/>
+  <path d="M 16 29 C 16 24, 32 24, 32 29" stroke="#34d399" stroke-width="2" fill="none"/>
+  <line x1="24" y1="34" x2="24" y2="40" stroke="#10b981" stroke-width="2"/>
+  <line x1="16" y1="40" x2="32" y2="40" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+</svg>'''
+
+    # 3. Decision / Strategy / Choice / Fork
+    elif any(k in lbl for k in ["decide", "decision", "choose", "choice", "fork", "evaluate"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <polygon points="24,6 40,24 24,42 8,24" fill="#1e1b4b" stroke="#a855f7" stroke-width="2"/>
+  <circle cx="24" cy="24" r="4" fill="#c084fc"/>
+  <path d="M 24 14 L 24 20" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 24 28 L 24 34" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 14 24 L 20 24" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+  <path d="M 28 24 L 34 24" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
+</svg>'''
+
+    # 4. Inspection / QA / Verify / Audit / Review
+    elif any(k in lbl for k in ["inspect", "qa", "verify", "check", "audit", "review", "test"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <circle cx="20" cy="20" r="11" fill="#082f49" stroke="#38bdf8" stroke-width="2.5"/>
+  <line x1="28" y1="28" x2="40" y2="40" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
+  <path d="M 15 20 L 19 24 L 26 16" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>'''
+
+    # 5. Delivery / Shipping / Deploy / Release / Ship
+    elif any(k in lbl for k in ["ship", "deliver", "deploy", "release", "send", "finish", "export"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <path d="M 24 6 L 40 15 L 24 24 L 8 15 Z" fill="#064e3b" stroke="#34d399" stroke-width="2"/>
+  <path d="M 8 15 L 8 33 L 24 42 L 24 24 Z" fill="#022c22" stroke="#34d399" stroke-width="2"/>
+  <path d="M 40 15 L 40 33 L 24 42 L 24 24 Z" fill="#065f46" stroke="#34d399" stroke-width="2"/>
+  <line x1="24" y1="24" x2="24" y2="42" stroke="#10b981" stroke-width="2"/>
+</svg>'''
+
+    # 6. Finance / Pricing / Cost / Budget / Metric
+    elif any(k in lbl for k in ["cost", "price", "budget", "finance", "rate", "$", "pay"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <circle cx="24" cy="24" r="17" fill="#451a03" stroke="#f59e0b" stroke-width="2"/>
+  <text x="24" y="32" fill="#fbbf24" font-size="22" font-weight="900" text-anchor="middle" font-family="monospace">$</text>
+  <path d="M 12 12 L 18 6" stroke="#fbbf24" stroke-width="2" stroke-linecap="round"/>
+</svg>'''
+
+    # 7. Code / Tech / Dev / Build / API
+    elif any(k in lbl for k in ["code", "dev", "api", "build", "compile", "tech", "software"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <rect x="6" y="8" width="36" height="32" rx="6" fill="#090d16" stroke="#06b6d4" stroke-width="2"/>
+  <path d="M 16 20 L 11 24 L 16 28" stroke="#38bdf8" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M 32 20 L 37 24 L 32 28" stroke="#38bdf8" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="26" y1="18" x2="22" y2="30" stroke="#64748b" stroke-width="2" stroke-linecap="round"/>
+</svg>'''
+
+    # 8. General / Action Node (Initial-based neon tech badge)
+    initial = (label.strip()[:2] if len(label.strip()) >= 2 else label.strip()[:1]).upper()
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#0c1322" stroke="#06b6d4" stroke-width="2"/>
+  <text x="24" y="29" fill="#38bdf8" font-size="14" font-weight="800" text-anchor="middle" font-family="monospace">{html.escape(initial)}</text>
+</svg>'''
+
+
+def generate_step_image(
+    node_label: str,
+    visual_description: str,
+    context: Optional[str] = None,
+    is_icon: bool = False,
+) -> str:
+    """
+    Generates a step illustration icon (is_icon=True) or contextual explanatory diagram.
+    Uses Gemini 2.5 Flash-Lite with high-speed execution and smart semantic fallbacks.
     Returns relative URL path: /img/{image_id}
     """
     image_id = f"{uuid.uuid4().hex[:12]}.svg"
     local_path = CACHE_DIR / image_id
     generated_bytes = None
 
-    # Step 1: Attempt Gemini 2.5 Flash SVG generation for exact contextual diagram
+    # For compact flow node icons (36x36 px)
+    if is_icon or ("line icon" in visual_description.lower() and len(node_label) < 25):
+        svg_content = build_semantic_step_icon(node_label)
+        generated_bytes = sanitize_svg(svg_content).encode("utf-8")
+        with open(local_path, "wb") as f:
+            f.write(generated_bytes)
+        return f"/img/{image_id}"
+
+    # For explanatory schematics and answer diagrams:
+    # Attempt Gemini 2.5 Flash-Lite SVG generation for exact contextual diagram
     try:
         from google import genai
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
@@ -57,7 +179,7 @@ def generate_step_image(node_label: str, visual_description: str, context: Optio
             client = genai.Client(api_key=api_key)
 
         if client:
-            context_snippet = f"Meeting conversation context: {context[:200]}" if context else ""
+            context_snippet = f"Meeting conversation context: {context[:250]}" if context else ""
             prompt = (
                 f"You are a technical visual diagram generator for an AI meeting assistant.\n"
                 f"Create a clean, minimalist SVG diagram illustrating: '{node_label}'.\n"
@@ -71,31 +193,27 @@ def generate_step_image(node_label: str, visual_description: str, context: Optio
                 f"- Output ONLY valid raw <svg>...</svg> markup with NO markdown fences."
             )
             resp = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model=REASONING_MODEL,
                 contents=prompt,
             )
             if resp.text:
                 raw_svg = resp.text.strip()
-                import re
                 if "```" in raw_svg:
                     raw_svg = re.sub(r"```(?:xml|svg)?", "", raw_svg).strip("` \n")
                 if "<svg" in raw_svg and "</svg>" in raw_svg:
                     start_idx = raw_svg.find("<svg")
                     end_idx = raw_svg.rfind("</svg>") + 6
-                    svg_clean = raw_svg[start_idx:end_idx]
-                    generated_bytes = svg_clean.encode("utf-8")
+                    svg_clean = sanitize_svg(raw_svg[start_idx:end_idx])
+                    if svg_clean:
+                        generated_bytes = svg_clean.encode("utf-8")
     except Exception as e:
         logger.warning(f"Gemini SVG diagram generation error ({e}); using smart dynamic SVG synthesizer.")
 
-    # Step 2: Intelligent dynamic SVG fallback (Context-aware: Math, Flow, or Concept)
+    # Intelligent dynamic SVG fallback (Math, Flow, or Semantic Diagram)
     if not generated_bytes:
-        import html
-        import re
-
         clean_label = html.escape(node_label.strip() or "Concept")
-        clean_desc = html.escape((visual_description or "")[:40])
 
-        # Detect calculation / arithmetic: e.g. "10 + 10", "48000 * 12", "A + B"
+        # Detect calculation / arithmetic: e.g. "10 + 10", "48000 * 12"
         math_match = re.search(r"(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)", node_label)
         if math_match:
             op1, op, op2 = math_match.group(1), math_match.group(2), math_match.group(3)
@@ -122,31 +240,25 @@ def generate_step_image(node_label: str, visual_description: str, context: Optio
   <rect width="380" height="140" rx="12" fill="#050811" stroke="#1e293b" stroke-width="1.5"/>
   <text x="25" y="24" fill="#64748b" font-size="9" font-family="monospace" letter-spacing="1">CALCULATION &amp; METRIC BREAKDOWN</text>
   
-  <!-- Operand 1 -->
   <rect x="25" y="42" width="75" height="54" rx="8" fill="#0a1224" stroke="#06b6d4" stroke-width="1.5" filter="url(#glow-cyan)"/>
   <text x="62" y="76" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle" font-family="monospace">{op1}</text>
   <text x="62" y="112" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Value A</text>
 
-  <!-- Operator -->
   <circle cx="125" cy="69" r="14" fill="#0f172a" stroke="#334155" stroke-width="1"/>
   <text x="125" y="75" fill="#38bdf8" font-size="18" font-weight="bold" text-anchor="middle" font-family="monospace">{op}</text>
 
-  <!-- Operand 2 -->
   <rect x="165" y="42" width="75" height="54" rx="8" fill="#0a1224" stroke="#06b6d4" stroke-width="1.5" filter="url(#glow-cyan)"/>
   <text x="202" y="76" fill="#f8fafc" font-size="20" font-weight="700" text-anchor="middle" font-family="monospace">{op2}</text>
   <text x="202" y="112" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Value B</text>
 
-  <!-- Arrow -->
   <path d="M 255 69 L 275 69" stroke="#10b981" stroke-width="2.5" fill="none" stroke-linecap="round"/>
   <polygon points="275,64 283,69 275,74" fill="#10b981"/>
 
-  <!-- Result -->
   <rect x="290" y="38" width="70" height="62" rx="10" fill="#06281e" stroke="#10b981" stroke-width="2" filter="url(#glow-green)"/>
   <text x="325" y="76" fill="#34d399" font-size="22" font-weight="800" text-anchor="middle" font-family="monospace">{res_str}</text>
   <text x="325" y="116" fill="#34d399" font-size="9" font-weight="bold" text-anchor="middle" font-family="sans-serif">RESULT</text>
 </svg>'''
         else:
-            # Multi-Node Schematic Diagram
             svg_content = f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 140" width="100%" height="auto">
   <defs>
     <filter id="glow-cyan" x="-20%" y="-20%" width="140%" height="140%">
@@ -156,33 +268,29 @@ def generate_step_image(node_label: str, visual_description: str, context: Optio
   <rect width="380" height="140" rx="12" fill="#050811" stroke="#1e293b" stroke-width="1.5"/>
   <text x="25" y="24" fill="#64748b" font-size="9" font-family="monospace" letter-spacing="1">TOPIC SCHEMATIC // MEETING KNOWLEDGE</text>
 
-  <!-- Input / Context Node -->
   <rect x="25" y="44" width="100" height="52" rx="8" fill="#091326" stroke="#06b6d4" stroke-width="1.5"/>
   <text x="75" y="74" fill="#f8fafc" font-size="11" font-weight="600" text-anchor="middle" font-family="sans-serif">{clean_label[:14]}</text>
 
-  <!-- Connector -->
   <path d="M 125 70 L 175 70" stroke="#06b6d4" stroke-width="2" stroke-dasharray="4" fill="none"/>
   <polygon points="175,66 182,70 175,74" fill="#06b6d4"/>
 
-  <!-- Core Process / Engine Node -->
   <rect x="185" y="38" width="90" height="64" rx="10" fill="#0d1b33" stroke="#38bdf8" stroke-width="2" filter="url(#glow-cyan)"/>
   <text x="230" y="68" fill="#38bdf8" font-size="11" font-weight="700" text-anchor="middle" font-family="sans-serif">Analysis</text>
   <text x="230" y="84" fill="#94a3b8" font-size="9" text-anchor="middle" font-family="sans-serif">Synthesis</text>
 
-  <!-- Output Node -->
   <path d="M 275 70 L 305 70" stroke="#10b981" stroke-width="2" fill="none"/>
   <polygon points="305,66 312,70 305,74" fill="#10b981"/>
   <rect x="312" y="46" width="50" height="48" rx="8" fill="#06281e" stroke="#10b981" stroke-width="1.5"/>
   <text x="337" y="74" fill="#34d399" font-size="10" font-weight="bold" text-anchor="middle" font-family="sans-serif">Valid</text>
 </svg>'''
 
-        generated_bytes = svg_content.encode("utf-8")
+        generated_bytes = sanitize_svg(svg_content).encode("utf-8")
 
     # Save to local cache
     with open(local_path, "wb") as f:
         f.write(generated_bytes)
 
-    # If GCS_BUCKET is configured, upload to Cloud Storage
+    # Cloud Storage sync if configured
     bucket_name = os.getenv("GCS_BUCKET")
     if bucket_name:
         client = get_storage_client()
