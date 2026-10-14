@@ -58,7 +58,11 @@ async def handle_clear(sid: str, args: Dict[str, Any], ws_sender: Callable) -> D
     from app.agent import reset_agent_session
     await reset_agent_session(sid)
     logger.info(f"Cleared all blocks and reset agent session for {sid}")
-    await ws_sender({"type": "canvas_cleared"})
+    if ws_sender:
+        import inspect
+        res = ws_sender({"type": "canvas_cleared"})
+        if inspect.isawaitable(res):
+            await res
     return {"status": "ok", "cleared": len(blocks)}
 
 

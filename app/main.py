@@ -89,7 +89,10 @@ async def execute_command(request: Request):
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
-    sid = "default_session"
+    sid = websocket.query_params.get("session_id") or "default_session"
+    if websocket.query_params.get("fresh") == "1":
+        for b in get_blocks(sid):
+            delete_block(sid, b["id"])
     save_session(sid, title="Live Meeting")
 
     logger.info(f"WebSocket client connected (session={sid})")

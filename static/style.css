@@ -257,6 +257,29 @@ body {
   animation: pulse-red 2s infinite;
 }
 
+.reset-btn {
+  background: #090e18;
+  color: var(--text-muted);
+  border: 1px solid var(--border-subtle);
+  padding: 0.45rem 0.85rem;
+  border-radius: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  transition: all 0.25s ease;
+}
+
+.reset-btn:hover {
+  background: #0f182e;
+  color: var(--neon-cyan);
+  border-color: var(--neon-cyan);
+  box-shadow: 0 0 14px var(--neon-cyan-glow);
+}
+
 .text-input-wrap {
   display: flex;
   align-items: center;

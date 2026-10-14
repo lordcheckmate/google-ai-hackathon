@@ -31,6 +31,7 @@ const wsStatus = document.getElementById('ws-status');
 const micBtn = document.getElementById('mic-btn');
 const micIcon = document.getElementById('mic-icon');
 const micText = document.getElementById('mic-text');
+const resetBtn = document.getElementById('reset-btn');
 const manualTextInput = document.getElementById('manual-text');
 const sendManualBtn = document.getElementById('send-manual-btn');
 
@@ -93,7 +94,14 @@ function setSpeechBubble(text, mode = '') {
 
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const wsUrl = `${protocol}//${window.location.host}/ws`;
+  const urlParams = new URLSearchParams(window.location.search);
+  let sessionId = urlParams.get('session_id') || localStorage.getItem('aegis_session_id');
+  if (!sessionId) {
+    sessionId = 'default_session';
+    localStorage.setItem('aegis_session_id', sessionId);
+  }
+  const freshQuery = urlParams.has('fresh') ? '&fresh=1' : '';
+  const wsUrl = `${protocol}//${window.location.host}/ws?session_id=${encodeURIComponent(sessionId)}${freshQuery}`;
 
   ws = new WebSocket(wsUrl);
   ws.binaryType = 'arraybuffer';
@@ -441,6 +449,26 @@ manualTextInput.addEventListener('keydown', (e) => {
     sendManualTurn();
   }
 });
+
+// =========================================================================
+// Canvas Reset / Refresh Dispatcher
+// =========================================================================
+
+function resetCanvas() {
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'command', name: 'clear', args: {} }));
+  }
+  blocksStore.clear();
+  activeBlockId = null;
+  renderNeonSquare();
+  setAvatarState('listening');
+  setSpeechBubble('Canvas refreshed. Ready for meeting audio.');
+  console.log('[AEGIS] Canvas and agent session reset.');
+}
+
+if (resetBtn) {
+  resetBtn.addEventListener('click', resetCanvas);
+}
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
