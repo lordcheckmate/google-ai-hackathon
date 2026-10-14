@@ -1,34 +1,43 @@
-# Deploy Project A.E.G.I.S. to Google Cloud Run (PowerShell)
+# Deploy AI Meeting Assistant to Google Cloud Run
 $ErrorActionPreference = "Stop"
 
-$projectId = (gcloud config get-value project 2>$null)
+$gcloudCmd = "C:\Users\saega\google-cloud-sdk\google-cloud-sdk\bin\gcloud.cmd"
+if (-not (Test-Path $gcloudCmd)) {
+    $gcloudCmd = "gcloud"
+}
+
+$projectId = (& $gcloudCmd config get-value project 2>$null)
 if (-not $projectId) {
-    Write-Host "Please log into Google Cloud first: gcloud auth login && gcloud config set project YOUR_PROJECT_ID" -ForegroundColor Red
+    Write-Host "Please set your Google Cloud Project first: gcloud config set project YOUR_PROJECT_ID" -ForegroundColor Red
     exit 1
 }
 
-$serviceName = "aegis-copilot"
-$region = "asia-northeast1"
+$serviceName = "ai-meeting-assistant"
+$region = "us-central1"
 
 Write-Host "==========================================================" -ForegroundColor Cyan
-Write-Host "🚀 Deploying Project A.E.G.I.S. to Google Cloud Run" -ForegroundColor Cyan
+Write-Host "🚀 Deploying AI Meeting Assistant to Google Cloud Run" -ForegroundColor Cyan
 Write-Host "Project ID: $projectId" -ForegroundColor Yellow
 Write-Host "Service:    $serviceName" -ForegroundColor Yellow
 Write-Host "Region:     $region" -ForegroundColor Yellow
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-gcloud run deploy $serviceName `
+& $gcloudCmd run deploy $serviceName `
   --source . `
   --region $region `
   --platform managed `
   --allow-unauthenticated `
-  --port 8080 `
-  --set-env-vars GEMINI_API_KEY="$($env:GEMINI_API_KEY)"
+  --timeout 3600 `
+  --session-affinity `
+  --min-instances 0 `
+  --max-instances 3 `
+  --cpu-boost `
+  --memory 1Gi `
+  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_LOCATION=us-central1,REASONING_MODEL=gemini-2.5-flash,IMAGE_MODEL=gemini-3.1-flash-image
 
-$serviceUrl = (gcloud run services describe $serviceName --platform managed --region $region --format 'value(status.url)')
+$serviceUrl = (& $gcloudCmd run services describe $serviceName --platform managed --region $region --format "value(status.url)")
 
 Write-Host "==========================================================" -ForegroundColor Green
 Write-Host "🎉 DEPLOYMENT SUCCESSFUL!" -ForegroundColor Green
 Write-Host "Public Cloud Run URL: $serviceUrl" -ForegroundColor Cyan
-Write-Host "Use this URL in your Zenn Hackathon submission!" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Green
