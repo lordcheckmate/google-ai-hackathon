@@ -70,6 +70,11 @@
           <button onclick="setTheme('monolith')" id="tab-monolith" class="px-2.5 py-1 text-xs font-mono rounded text-zinc-400 hover:text-white">MONOLITH</button>
         </div>
 
+        <button onclick="togglePictureInPicture()" id="pip-btn" class="px-3 py-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 transition-all text-xs font-mono font-semibold flex items-center gap-1.5 shadow-[0_0_10px_rgba(6,182,212,0.2)]">
+          <span>🪟</span>
+          <span id="pip-btn-text">POP OUT HUD (PiP)</span>
+        </button>
+
         <button onclick="toggleScreenShare()" id="screen-share-btn" class="px-3.5 py-1.5 rounded-lg border border-emerald-500/50 bg-emerald-950/30 text-emerald-300 hover:bg-emerald-900/50 transition-all text-xs font-mono font-semibold flex items-center gap-2">
           <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
           <span id="screen-share-text">SHARE SCREEN (STANDBY)</span>

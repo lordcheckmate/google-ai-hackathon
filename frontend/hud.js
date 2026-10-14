@@ -164,6 +164,16 @@ function updateCharacterState(state, speechText) {
     mouth.setAttribute('fill', '#ef4444');
     gem.className = 'absolute top-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-red-500 shadow-[0_0_12px_#ef4444] animate-ping';
   }
+
+  // Mirror to Picture-in-Picture window if active
+  if (pipWindow && !pipWindow.closed) {
+    const pipBubble = pipWindow.document.getElementById('pip-speech-bubble');
+    if (pipBubble && speechText) pipBubble.innerText = `"${speechText}"`;
+    const pipAvatarBox = pipWindow.document.getElementById('pip-avatar-box');
+    if (pipAvatarBox) {
+      pipAvatarBox.innerHTML = document.getElementById('character-wrapper').outerHTML;
+    }
+  }
 }
 
 function displayContradictionAlert(alert) {
@@ -190,6 +200,17 @@ function displayContradictionAlert(alert) {
 
   details.classList.remove('hidden');
   chatPosted.classList.remove('hidden');
+
+  // Mirror alert to PiP window
+  if (pipWindow && !pipWindow.closed) {
+    const pipAlert = pipWindow.document.getElementById('pip-alert-box');
+    if (pipAlert) {
+      pipAlert.style.background = 'rgba(239, 68, 68, 0.25)';
+      pipAlert.style.border = '1px solid #ef4444';
+      pipAlert.style.color = '#fca5a5';
+      pipAlert.innerText = `⚠️ ${alert.clarification_question}`;
+    }
+  }
 }
 
 function renderDiagram(diagramData) {
@@ -331,6 +352,83 @@ function handleScreenShareState(active) {
     text.innerText = 'SHARE SCREEN (STANDBY)';
     statusDisplay.innerText = 'STANDBY';
     statusDisplay.className = 'text-zinc-400';
+  }
+}
+
+let pipWindow = null;
+
+async function togglePictureInPicture() {
+  const pipBtn = document.getElementById('pip-btn');
+  const pipText = document.getElementById('pip-btn-text');
+
+  if (pipWindow && !pipWindow.closed) {
+    pipWindow.close();
+    pipWindow = null;
+    pipText.innerText = 'POP OUT HUD (PiP)';
+    pipBtn.className = 'px-3 py-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 transition-all text-xs font-mono font-semibold flex items-center gap-1.5 shadow-[0_0_10px_rgba(6,182,212,0.2)]';
+    return;
+  }
+
+  // Native Chrome Document Picture-in-Picture API
+  if (window.documentPictureInPicture && window.documentPictureInPicture.requestWindow) {
+    try {
+      pipWindow = await window.documentPictureInPicture.requestWindow({
+        width: 380,
+        height: 380,
+      });
+
+      document.querySelectorAll('style, link[rel="stylesheet"]').forEach(el => {
+        pipWindow.document.head.appendChild(el.cloneNode(true));
+      });
+
+      pipWindow.document.body.className = 'bg-black text-slate-100 font-sans p-4 m-0 flex flex-col justify-between h-screen box-border overflow-hidden select-none';
+
+      pipWindow.document.body.innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #27272a; padding-bottom:8px; margin-bottom:10px;">
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span style="width:8px; height:8px; border-radius:50%; background:#06b6d4; box-shadow:0 0 8px #06b6d4;"></span>
+            <span style="font-family:monospace; font-size:12px; font-weight:bold; color:#06b6d4;">AEGIS // MINI COPILOT</span>
+          </div>
+          <span style="font-family:monospace; font-size:10px; color:#10b981;">LIVE OVERLAY</span>
+        </div>
+
+        <div style="flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center;">
+          <div id="pip-avatar-box" style="margin-bottom:10px;">
+            ${document.getElementById('character-wrapper').outerHTML}
+          </div>
+          <div id="pip-speech-bubble" style="font-family:monospace; font-size:11px; background:#09090b; border:1px solid #27272a; padding:6px 12px; border-radius:8px; color:#e4e4e7; max-width:90%;">
+            ${document.getElementById('char-speech-bubble').innerText}
+          </div>
+        </div>
+
+        <div id="pip-alert-box" style="margin-top:10px; font-family:monospace; font-size:10px; padding:6px 10px; border-radius:6px; background:#18181b; border:1px solid #27272a; color:#a1a1aa; text-align:center;">
+          Truth Sentinel: Monitoring Dialogue...
+        </div>
+      `;
+
+      pipText.innerText = 'FLOAT ACTIVE';
+      pipBtn.className = 'px-3 py-1.5 rounded-lg border border-cyan-400 bg-cyan-900/60 text-cyan-200 transition-all text-xs font-mono font-semibold flex items-center gap-1.5 shadow-[0_0_12px_rgba(6,182,212,0.5)] animate-pulse';
+
+      pipWindow.addEventListener('pagehide', () => {
+        pipWindow = null;
+        pipText.innerText = 'POP OUT HUD (PiP)';
+        pipBtn.className = 'px-3 py-1.5 rounded-lg border border-cyan-500/50 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-900/50 transition-all text-xs font-mono font-semibold flex items-center gap-1.5 shadow-[0_0_10px_rgba(6,182,212,0.2)]';
+      });
+
+      return;
+    } catch (e) {
+      console.warn("Document PiP request failed, falling back to popup window:", e);
+    }
+  }
+
+  // Fallback: standard popup window
+  const popup = window.open(
+    window.location.href,
+    'AEGIS_MiniHUD',
+    'width=420,height=520,menubar=no,toolbar=no,location=no,status=no'
+  );
+  if (popup) {
+    pipText.innerText = 'POPUP ACTIVE';
   }
 }
 
