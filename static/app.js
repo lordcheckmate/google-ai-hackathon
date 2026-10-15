@@ -735,7 +735,7 @@ function openElementModal(data) {
     elementModalDesc.textContent = data.note || 'No additional details provided for this element.';
   }
   if (elementModalImgContainer && elementModalImg) {
-    if (data.img && data.img !== 'loading' && (data.img.startsWith('http') || data.img.startsWith('/'))) {
+    if (data.img && data.img !== 'loading' && (data.img.startsWith('http') || data.img.startsWith('/') || data.img.startsWith('data:'))) {
       elementModalImg.src = data.img;
       elementModalImgContainer.classList.remove('hidden');
     } else {

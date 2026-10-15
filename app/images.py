@@ -179,7 +179,7 @@ def generate_nano_banana_image(
     try:
         from google import genai
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
-        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        project = os.getenv("GOOGLE_CLOUD_PROJECT") or "project-97d34c6c-e057-425f-987"
         location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
         api_key = os.getenv("GEMINI_API_KEY")
 
@@ -218,11 +218,18 @@ def generate_nano_banana_image(
         logger.warning(f"Gemini 3.1 Flash Lite Image generation failed ({e}); using vector fallback.")
 
     if generated_bytes:
-        image_id = f"nb_{uuid.uuid4().hex[:12]}{ext}"
-        local_path = CACHE_DIR / image_id
-        with open(local_path, "wb") as f:
-            f.write(generated_bytes)
-        return f"/img/{image_id}", description_text
+        import base64
+        mime = "image/jpeg" if ext == ".jpg" else "image/png"
+        b64 = base64.b64encode(generated_bytes).decode("ascii")
+        data_uri = f"data:{mime};base64,{b64}"
+        try:
+            image_id = f"nb_{uuid.uuid4().hex[:12]}{ext}"
+            local_path = CACHE_DIR / image_id
+            with open(local_path, "wb") as f:
+                f.write(generated_bytes)
+        except Exception:
+            pass
+        return data_uri, description_text
 
     # Fallback to SVG schematic
     svg_url = generate_step_image(concept, context or description_text, is_icon=False)
@@ -249,8 +256,14 @@ def generate_step_image(
     if is_icon or ("line icon" in visual_description.lower() and len(node_label) < 25):
         svg_content = build_semantic_step_icon(node_label)
         generated_bytes = sanitize_svg(svg_content).encode("utf-8")
-        with open(local_path, "wb") as f:
-            f.write(generated_bytes)
+        try:
+            with open(local_path, "wb") as f:
+                f.write(generated_bytes)
+        except Exception:
+            pass
+        import base64
+        return f"data:image/svg+xml;base64,{base64.b64encode(generated_bytes).decode('ascii')}"
+
     # Dedicated high-contrast Nano Banana illustration schematic
     if any(k in node_label.lower() for k in ["banana", "banana shape", "banana shappe"]):
         svg_content = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 200" width="100%" height="auto">
@@ -271,9 +284,13 @@ def generate_step_image(
   <text x="190" y="185" fill="#fef08a" font-size="13" font-weight="bold" font-family="monospace" text-anchor="middle">🍌 Banana Shape Vector Model</text>
 </svg>'''
         generated_bytes = sanitize_svg(svg_content).encode("utf-8")
-        with open(local_path, "wb") as f:
-            f.write(generated_bytes)
-        return f"/img/{image_id}"
+        try:
+            with open(local_path, "wb") as f:
+                f.write(generated_bytes)
+        except Exception:
+            pass
+        import base64
+        return f"data:image/svg+xml;base64,{base64.b64encode(generated_bytes).decode('ascii')}"
 
     # Instant sub-millisecond math/calculation schematic (Zero LLM latency!)
     math_match = re.search(r"(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)", node_label)
@@ -321,18 +338,22 @@ def generate_step_image(
   <text x="325" y="116" fill="#34d399" font-size="9" font-weight="bold" text-anchor="middle" font-family="sans-serif">RESULT</text>
 </svg>'''
         generated_bytes = sanitize_svg(svg_content).encode("utf-8")
-        with open(local_path, "wb") as f:
-            f.write(generated_bytes)
-        return f"/img/{image_id}"
+        try:
+            with open(local_path, "wb") as f:
+                f.write(generated_bytes)
+        except Exception:
+            pass
+        import base64
+        return f"data:image/svg+xml;base64,{base64.b64encode(generated_bytes).decode('ascii')}"
 
     # For explanatory schematics and answer diagrams:
-    # Attempt Gemini 2.5 Flash-Lite SVG generation for exact contextual diagram
+    # Attempt Gemini SVG generation for exact contextual diagram
     try:
         from google import genai
         from google.genai import types
         use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
-        project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+        project = os.getenv("GOOGLE_CLOUD_PROJECT") or "project-97d34c6c-e057-425f-987"
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
         api_key = os.getenv("GEMINI_API_KEY")
 
         client = None
@@ -359,7 +380,6 @@ def generate_step_image(
                 model=REASONING_MODEL,
                 contents=prompt,
                 config=types.GenerateContentConfig(
-                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                     temperature=0.1,
                 ),
             )
@@ -454,23 +474,14 @@ def generate_step_image(
         generated_bytes = sanitize_svg(svg_content).encode("utf-8")
 
     # Save to local cache
-    with open(local_path, "wb") as f:
-        f.write(generated_bytes)
+    try:
+        with open(local_path, "wb") as f:
+            f.write(generated_bytes)
+    except Exception:
+        pass
 
-    # Cloud Storage sync if configured
-    bucket_name = os.getenv("GCS_BUCKET")
-    if bucket_name:
-        client = get_storage_client()
-        if client:
-            try:
-                bucket = client.bucket(bucket_name)
-                blob = bucket.blob(f"images/{image_id}")
-                content_type = "image/svg+xml" if image_id.endswith(".svg") else "image/png"
-                blob.upload_from_filename(str(local_path), content_type=content_type)
-            except Exception as e:
-                logger.warning(f"GCS upload failed ({e})")
-
-    return f"/img/{image_id}"
+    import base64
+    return f"data:image/svg+xml;base64,{base64.b64encode(generated_bytes).decode('ascii')}"
 
 
 def get_image(image_id: str) -> Optional[Tuple[bytes, str]]:

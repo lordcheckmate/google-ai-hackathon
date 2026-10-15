@@ -63,8 +63,8 @@ class BasicAuthMiddleware(BaseHTTPMiddleware):
     Allows unauthenticated access to /health for Cloud Run liveness checks.
     """
     async def dispatch(self, request: Request, call_next):
-        # Whitelisted health check and robots
-        if request.url.path in ("/health", "/robots.txt"):
+        # Whitelisted health check, robots, and image assets
+        if request.url.path in ("/health", "/robots.txt") or request.url.path.startswith("/img/"):
             return await call_next(request)
 
         # Allow WebSocket upgrades to be verified at the endpoint level
