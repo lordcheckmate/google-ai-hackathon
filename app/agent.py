@@ -877,7 +877,6 @@ def create_adk_agent() -> Agent:
         model=REASONING_MODEL,
         instruction=SYSTEM_INSTRUCTION,
         generate_content_config=types.GenerateContentConfig(
-            thinking_config=types.ThinkingConfig(thinking_budget=0),
             temperature=0.1,
         ),
         tools=[
