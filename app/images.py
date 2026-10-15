@@ -172,9 +172,7 @@ def generate_nano_banana_image(
     Returns (image_url, description_text).
     Falls back gracefully to high-contrast vector synthesizer if offline.
     """
-    image_id = f"nb_{uuid.uuid4().hex[:12]}.png"
-    local_path = CACHE_DIR / image_id
-
+    ext = ".png"
     generated_bytes = None
     description_text = ""
 
@@ -209,12 +207,19 @@ def generate_nano_banana_image(
                         description_text += part.text + " "
                     if getattr(part, "inline_data", None) and part.inline_data.data:
                         generated_bytes = part.inline_data.data
+                        mime_type = getattr(part.inline_data, "mime_type", "")
+                        if "jpeg" in mime_type or "jpg" in mime_type:
+                            ext = ".jpg"
+                        else:
+                            ext = ".png"
 
             description_text = description_text.strip()
     except Exception as e:
-        logger.warning(f"Gemini 2.5 Flash Image (Nano Banana) generation failed ({e}); using vector fallback.")
+        logger.warning(f"Gemini 3.1 Flash Lite Image generation failed ({e}); using vector fallback.")
 
     if generated_bytes:
+        image_id = f"nb_{uuid.uuid4().hex[:12]}{ext}"
+        local_path = CACHE_DIR / image_id
         with open(local_path, "wb") as f:
             f.write(generated_bytes)
         return f"/img/{image_id}", description_text
@@ -471,7 +476,12 @@ def generate_step_image(
 def get_image(image_id: str) -> Optional[Tuple[bytes, str]]:
     """Retrieve image bytes and mime type by image_id."""
     local_path = CACHE_DIR / image_id
-    mime = "image/svg+xml" if image_id.endswith(".svg") else "image/png"
+    if image_id.endswith(".svg"):
+        mime = "image/svg+xml"
+    elif image_id.endswith(".jpg") or image_id.endswith(".jpeg"):
+        mime = "image/jpeg"
+    else:
+        mime = "image/png"
 
     if local_path.exists():
         with open(local_path, "rb") as f:

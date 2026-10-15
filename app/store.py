@@ -38,12 +38,15 @@ def get_firestore_client():
     return _firestore_client
 
 
-def save_session(sid: str, title: str = "Meeting Session") -> Dict[str, Any]:
+def save_session(sid: str, title: str = "New Meeting", user_id: str = "guest_default") -> Dict[str, Any]:
+    existing = _SESSIONS.get(sid, {})
     sess = {
         "sid": sid,
-        "title": title,
-        "status": "active",
-        "created_at": time.time(),
+        "title": title or existing.get("title", "New Meeting"),
+        "status": existing.get("status", "active"),
+        "created_at": existing.get("created_at", time.time()),
+        "updated_at": time.time(),
+        "user_id": user_id or existing.get("user_id", "guest_default"),
     }
     _SESSIONS[sid] = sess
     if sid not in _BLOCKS:
@@ -58,6 +61,53 @@ def save_session(sid: str, title: str = "Meeting Session") -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Firestore save_session error: {e}")
     return sess
+
+
+def list_sessions(user_id: str = "guest_default") -> List[Dict[str, Any]]:
+    """Return all sessions belonging to user_id, newest first."""
+    db = get_firestore_client()
+    if db:
+        try:
+            query = db.collection("sessions").where("user_id", "==", user_id).stream()
+            for doc in query:
+                data = doc.to_dict()
+                sid = data.get("sid", doc.id)
+                _SESSIONS[sid] = data
+        except Exception as e:
+            logger.warning(f"Firestore list_sessions error: {e}")
+
+    sessions = [s for s in _SESSIONS.values() if s.get("user_id", "guest_default") == user_id]
+    sessions.sort(key=lambda s: s.get("updated_at", s.get("created_at", 0)), reverse=True)
+    return sessions
+
+
+def update_session_title(sid: str, title: str) -> bool:
+    if sid in _SESSIONS:
+        _SESSIONS[sid]["title"] = title
+        _SESSIONS[sid]["updated_at"] = time.time()
+    db = get_firestore_client()
+    if db:
+        try:
+            db.collection("sessions").document(sid).update({"title": title, "updated_at": time.time()})
+        except Exception as e:
+            logger.warning(f"Firestore update_session_title error: {e}")
+    return True
+
+
+def delete_session(sid: str, user_id: str = "guest_default") -> bool:
+    if sid in _SESSIONS:
+        if _SESSIONS[sid].get("user_id", "guest_default") == user_id:
+            del _SESSIONS[sid]
+    _BLOCKS.pop(sid, None)
+    _TURNS.pop(sid, None)
+    _TRANSCRIPTS.pop(sid, None)
+    db = get_firestore_client()
+    if db:
+        try:
+            db.collection("sessions").document(sid).delete()
+        except Exception as e:
+            logger.warning(f"Firestore delete_session error: {e}")
+    return True
 
 
 def get_blocks(sid: str) -> List[Dict[str, Any]]:
@@ -139,11 +189,12 @@ def delete_block(sid: str, block_id: str) -> bool:
 
 
 def clear_session_blocks(sid: str) -> int:
-    """Wipe all blocks for a session from both in-memory cache and Firestore."""
+    """Wipe all blocks and transcripts for a session from both in-memory cache and Firestore."""
     count = 0
     if sid in _BLOCKS:
         count = len(_BLOCKS[sid])
         _BLOCKS[sid].clear()
+    _TRANSCRIPTS.pop(sid, None)
 
     db = get_firestore_client()
     if db:
@@ -192,8 +243,24 @@ def log_turn(
             logger.warning(f"Firestore log_turn error: {e}")
 
 
+_TRANSCRIPTS: Dict[str, List[str]] = {}
+
+
+def record_transcript(sid: str, text: str):
+    """Record an utterance in the session's complete chronological transcript."""
+    txt = text.strip()
+    if not txt:
+        return
+    if sid not in _TRANSCRIPTS:
+        _TRANSCRIPTS[sid] = []
+    if not _TRANSCRIPTS[sid] or _TRANSCRIPTS[sid][-1] != txt:
+        _TRANSCRIPTS[sid].append(txt)
+
+
 def get_transcript_history(sid: str) -> List[str]:
-    """Retrieve chronologically ordered speech transcripts for the session."""
+    """Retrieve chronologically ordered speech transcripts for the entire session."""
+    if sid in _TRANSCRIPTS and _TRANSCRIPTS[sid]:
+        return list(_TRANSCRIPTS[sid])
     turns = _TURNS.get(sid, [])
     history = []
     for t in turns:

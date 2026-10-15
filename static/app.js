@@ -16,6 +16,7 @@ let isRecording = false;
 
 // Store blocks locally: block_id -> block object
 const blocksStore = new Map();
+let blocksOrder = []; // Chronological sequence of visual block IDs
 let activeBlockId = null;
 
 // DOM Elements
@@ -41,14 +42,259 @@ const exportHtmlBtn = document.getElementById('export-html-btn');
 const exportJsonBtn = document.getElementById('export-json-btn');
 const manualTextInput = document.getElementById('manual-text');
 const sendManualBtn = document.getElementById('send-manual-btn');
+const langSelect = document.getElementById('lang-select');
+
+let currentLanguage = localStorage.getItem('aegis_language') || 'en-US';
+if (langSelect) {
+  langSelect.value = currentLanguage;
+  langSelect.addEventListener('change', () => {
+    currentLanguage = langSelect.value;
+    localStorage.setItem('aegis_language', currentLanguage);
+    console.log(`[AEGIS] Language set to: ${currentLanguage}`);
+
+    if (speechRec) {
+      speechRec.lang = currentLanguage;
+      if (isRecording) {
+        try { speechRec.stop(); } catch (_) {}
+      }
+    }
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'set_language', language: currentLanguage }));
+    }
+
+    const langName = currentLanguage === 'ja-JP' ? '日本語' : 'English';
+    setSpeechBubble(`Language: ${langName}`);
+  });
+}
+
+
+// Element Modal Elements
+const elementModal = document.getElementById('element-modal');
+const closeElementModalBtn = document.getElementById('close-element-modal');
+const elementModalShapeBadge = document.getElementById('element-modal-shape-badge');
+const elementModalTitle = document.getElementById('element-modal-title');
+const elementModalDesc = document.getElementById('element-modal-desc');
+const elementModalImgContainer = document.getElementById('element-modal-img-container');
+const elementModalImg = document.getElementById('element-modal-img');
+const elementIllustrateBtn = document.getElementById('element-illustrate-btn');
+const elementExplainBtn = document.getElementById('element-explain-btn');
+let currentModalElement = null;
+
+// Sidebar Elements
+const sidebar = document.getElementById('sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+const sidebarCollapseBtn = document.getElementById('sidebar-collapse-btn');
+const sidebarOpenBtn = document.getElementById('sidebar-open-btn');
+const newMeetingBtn = document.getElementById('new-meeting-btn');
+const sessionsList = document.getElementById('sessions-list');
+const guestIdDisplay = document.getElementById('guest-id-display');
 
 // Neon Square Elements
 const neonSquareFrame = document.getElementById('neon-square-frame');
 const activeVisualTitle = document.getElementById('active-visual-title');
 const activeVisualBadge = document.getElementById('active-visual-badge');
-const visualTabs = document.getElementById('visual-tabs');
+const timelineBar = document.getElementById('timeline-bar');
+const timelinePrevBtn = document.getElementById('timeline-prev-btn');
+const timelineNextBtn = document.getElementById('timeline-next-btn');
+const timelineScrubber = document.getElementById('timeline-scrubber');
+const timelineLatestBtn = document.getElementById('timeline-latest-btn');
 const neonStandby = document.getElementById('neon-standby');
 const neonCanvasContent = document.getElementById('neon-canvas-content');
+
+// =========================================================================
+// Private Guest Session State & Management
+// =========================================================================
+
+let currentSessions = [];
+
+function getOrCreateUserId() {
+  let uid = localStorage.getItem('aegis_user_id');
+  if (!uid) {
+    uid = 'guest_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('aegis_user_id', uid);
+  }
+  return uid;
+}
+
+function getCurrentSessionId() {
+  const urlParams = new URLSearchParams(window.location.search);
+  let sid = urlParams.get('session_id') || localStorage.getItem('aegis_session_id');
+  if (!sid) {
+    sid = 'sess_' + Math.random().toString(36).substring(2, 10);
+    localStorage.setItem('aegis_session_id', sid);
+  }
+  return sid;
+}
+
+function formatRelativeTime(ts) {
+  if (!ts) return '';
+  const now = Date.now() / 1000;
+  const diff = Math.max(0, now - ts);
+  if (diff < 60) return 'Just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  const d = new Date(ts * 1000);
+  return d.toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+async function fetchSessions() {
+  const uid = getOrCreateUserId();
+  try {
+    const res = await fetch(`/api/sessions?user_id=${encodeURIComponent(uid)}`);
+    if (res.ok) {
+      currentSessions = await res.json();
+      renderSidebarSessions();
+    }
+  } catch (err) {
+    console.warn('[AEGIS] Fetch sessions error:', err);
+  }
+}
+
+function renderSidebarSessions() {
+  if (!sessionsList) return;
+  sessionsList.innerHTML = '';
+
+  const activeSid = getCurrentSessionId();
+
+  if (currentSessions.length === 0) {
+    const emptyEl = document.createElement('div');
+    emptyEl.style.padding = '1.5rem 0.5rem';
+    emptyEl.style.color = '#475569';
+    emptyEl.style.fontSize = '0.78rem';
+    emptyEl.style.textAlign = 'center';
+    emptyEl.textContent = 'No meetings yet. Click "+ New Meeting" to start!';
+    sessionsList.appendChild(emptyEl);
+    return;
+  }
+
+  currentSessions.forEach(sess => {
+    const item = document.createElement('div');
+    item.className = 'session-item' + (sess.sid === activeSid ? ' active' : '');
+    item.title = sess.title || 'Untitled Meeting';
+
+    const left = document.createElement('div');
+    left.className = 'session-item-left';
+
+    const icon = document.createElement('span');
+    icon.className = 'session-item-icon';
+    icon.textContent = '💬';
+
+    const titleWrap = document.createElement('div');
+    titleWrap.style.minWidth = '0';
+    titleWrap.style.flex = '1';
+
+    const titleEl = document.createElement('div');
+    titleEl.className = 'session-item-title';
+    titleEl.textContent = sess.title || 'New Meeting';
+
+    const timeEl = document.createElement('div');
+    timeEl.className = 'session-item-time';
+    timeEl.textContent = formatRelativeTime(sess.updated_at || sess.created_at);
+
+    titleWrap.appendChild(titleEl);
+    titleWrap.appendChild(timeEl);
+
+    left.appendChild(icon);
+    left.appendChild(titleWrap);
+
+    const actions = document.createElement('div');
+    actions.className = 'session-item-actions';
+
+    const delBtn = document.createElement('button');
+    delBtn.className = 'session-del-btn';
+    delBtn.innerHTML = '🗑️';
+    delBtn.title = 'Delete meeting';
+    delBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (confirm(`Delete meeting "${sess.title || 'Untitled'}"?`)) {
+        await deleteMeetingSession(sess.sid);
+      }
+    });
+
+    actions.appendChild(delBtn);
+
+    item.appendChild(left);
+    item.appendChild(actions);
+
+    item.addEventListener('click', () => {
+      if (sess.sid !== activeSid) {
+        switchToSession(sess.sid);
+      }
+    });
+
+    sessionsList.appendChild(item);
+  });
+}
+
+async function switchToSession(sid) {
+  console.log(`[AEGIS] Switching to session: ${sid}`);
+  localStorage.setItem('aegis_session_id', sid);
+  const url = new URL(window.location);
+  url.searchParams.set('session_id', sid);
+  window.history.pushState({}, '', url);
+
+  // Clear in-memory canvas
+  blocksStore.clear();
+  blocksOrder = [];
+  activeBlockId = null;
+  renderNeonSquare();
+  renderSidebarSessions();
+
+  // Reconnect WebSocket for the new session
+  if (ws) {
+    try { ws.close(); } catch (_) {}
+  }
+  connectWebSocket();
+
+  // On mobile, close drawer automatically
+  closeSidebarDrawer();
+}
+
+async function createNewMeeting() {
+  const uid = getOrCreateUserId();
+  try {
+    const res = await fetch('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: uid, title: 'New Meeting' })
+    });
+    if (res.ok) {
+      const newSess = await res.json();
+      currentSessions.unshift(newSess);
+      await switchToSession(newSess.sid);
+      setSpeechBubble('Started fresh meeting session.');
+    }
+  } catch (err) {
+    console.error('[AEGIS] Create new meeting error:', err);
+  }
+}
+
+async function deleteMeetingSession(sid) {
+  const uid = getOrCreateUserId();
+  try {
+    await fetch(`/api/sessions/${encodeURIComponent(sid)}?user_id=${encodeURIComponent(uid)}`, {
+      method: 'DELETE'
+    });
+    currentSessions = currentSessions.filter(s => s.sid !== sid);
+    if (getCurrentSessionId() === sid) {
+      if (currentSessions.length > 0) {
+        await switchToSession(currentSessions[0].sid);
+      } else {
+        await createNewMeeting();
+      }
+    } else {
+      renderSidebarSessions();
+    }
+  } catch (err) {
+    console.error('[AEGIS] Delete session error:', err);
+  }
+}
+
+function closeSidebarDrawer() {
+  if (sidebar) sidebar.classList.remove('open');
+  if (sidebarBackdrop) sidebarBackdrop.classList.add('hidden');
+}
 
 // =========================================================================
 // Reactive Character Avatar States
@@ -102,13 +348,10 @@ function setSpeechBubble(text, mode = '') {
 function connectWebSocket() {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
   const urlParams = new URLSearchParams(window.location.search);
-  let sessionId = urlParams.get('session_id') || localStorage.getItem('aegis_session_id');
-  if (!sessionId) {
-    sessionId = 'default_session';
-    localStorage.setItem('aegis_session_id', sessionId);
-  }
+  const sessionId = getCurrentSessionId();
+  const userId = getOrCreateUserId();
   const freshQuery = urlParams.has('fresh') ? '&fresh=1' : '';
-  const wsUrl = `${protocol}//${window.location.host}/ws?session_id=${encodeURIComponent(sessionId)}${freshQuery}`;
+  const wsUrl = `${protocol}//${window.location.host}/ws?session_id=${encodeURIComponent(sessionId)}&user_id=${encodeURIComponent(userId)}${freshQuery}`;
 
   ws = new WebSocket(wsUrl);
   ws.binaryType = 'arraybuffer';
@@ -117,7 +360,11 @@ function connectWebSocket() {
     wsDot.className = 'status-dot active';
     wsStatus.textContent = 'Connected';
     console.log('[WS] Connected to AEGIS meeting engine');
+    try {
+      ws.send(JSON.stringify({ type: 'set_language', language: currentLanguage }));
+    } catch (_) {}
   };
+
 
   ws.onmessage = (event) => {
     try {
@@ -176,10 +423,21 @@ function handleServerMessage(msg) {
         }
       }, 2500);
     }
+    // Refresh sessions to keep timestamps/counts accurate
+    fetchSessions();
+  } else if (msg.type === 'session_title_updated') {
+    const sess = currentSessions.find(s => s.sid === msg.session_id);
+    if (sess) {
+      sess.title = msg.title;
+      renderSidebarSessions();
+    } else {
+      fetchSessions();
+    }
   } else if (msg.type === 'block_remove') {
     removeBlock(msg.block_id);
   } else if (msg.type === 'canvas_cleared') {
     blocksStore.clear();
+    blocksOrder = [];
     activeBlockId = null;
     renderNeonSquare();
   } else if (msg.type === 'speak') {
@@ -216,43 +474,56 @@ function handleServerMessage(msg) {
 // Audio Player (TTS & Speak-Over)
 // =========================================================================
 
+let isAudioPlaying = false;
+
 function playAudio(base64Audio, onEndCallback) {
   try {
+    isAudioPlaying = true;
     const audio = new Audio('data:audio/mp3;base64,' + base64Audio);
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'tts_playing', playing: true }));
     }
-    audio.onended = () => {
+    const finishAudio = () => {
+      setTimeout(() => {
+        isAudioPlaying = false;
+      }, 900);
       if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: 'tts_playing', playing: false }));
       }
       if (onEndCallback) onEndCallback();
     };
+    audio.onended = finishAudio;
+    audio.onerror = finishAudio;
     audio.play().catch(e => {
       console.warn('Audio auto-play blocked, click page to enable audio:', e);
-      if (onEndCallback) setTimeout(onEndCallback, 3000);
+      finishAudio();
     });
   } catch (e) {
     console.warn('Audio playback error:', e);
+    isAudioPlaying = false;
     if (onEndCallback) onEndCallback();
   }
 }
 
 // =========================================================================
-// Visual Store & Neon Square (四角形) Rendering
+// Visual Store & Neon Square (四角形) Rendering with Timeline
 // =========================================================================
 
 function storeAndRenderBlock(block) {
+  if (!blocksOrder.includes(block.id)) {
+    blocksOrder.push(block.id);
+  }
   blocksStore.set(block.id, block);
-  activeBlockId = block.id; // Switch active view to the newest/updated block
+  // Always automatically advance to the latest visual generation
+  activeBlockId = block.id;
   renderNeonSquare();
 }
 
 function removeBlock(blockId) {
   blocksStore.delete(blockId);
+  blocksOrder = blocksOrder.filter(id => id !== blockId);
   if (activeBlockId === blockId) {
-    const remaining = Array.from(blocksStore.keys());
-    activeBlockId = remaining.length > 0 ? remaining[remaining.length - 1] : null;
+    activeBlockId = blocksOrder.length > 0 ? blocksOrder[blocksOrder.length - 1] : null;
   }
   renderNeonSquare();
 }
@@ -264,7 +535,7 @@ function renderNeonSquare() {
     neonCanvasContent.innerHTML = '';
     activeVisualTitle.textContent = 'NEON VISUAL CANVAS';
     activeVisualBadge.textContent = 'STANDBY';
-    visualTabs.innerHTML = '';
+    if (timelineBar) timelineBar.classList.add('hidden');
     return;
   }
 
@@ -279,45 +550,213 @@ function renderNeonSquare() {
   const kindBadge = currentBlock.kind === 'flow' ? 'FLOW // NANO BANANA' : currentBlock.kind.toUpperCase();
   activeVisualBadge.textContent = kindBadge;
 
-  // Render Tabs if more than 1 block exists
-  renderTabs();
+  // Render Timeline Bar (Single-viewport model with history scrubber)
+  renderTimeline();
 
   // Render HTML / SVG content directly inside the single Neon Square
   neonCanvasContent.innerHTML = currentBlock.html || '';
 }
 
-function renderTabs() {
-  visualTabs.innerHTML = '';
-  if (blocksStore.size === 0) return;
+function renderTimeline() {
+  if (!timelineBar || !timelineScrubber) return;
 
-  blocksStore.forEach((block, id) => {
-    const tab = document.createElement('button');
-    tab.className = `visual-tab-pill ${id === activeBlockId ? 'active' : ''}`;
-    let label = block.title || block.kind;
-    if (block.kind === 'flow' && !label.startsWith('📋')) {
-      label = `📋 ${label}`;
+  if (blocksOrder.length <= 1) {
+    timelineBar.classList.add('hidden');
+    return;
+  }
+
+  timelineBar.classList.remove('hidden');
+  timelineScrubber.innerHTML = '';
+
+  let currentIndex = blocksOrder.indexOf(activeBlockId);
+  if (currentIndex === -1) {
+    currentIndex = blocksOrder.length - 1;
+    activeBlockId = blocksOrder[currentIndex];
+  }
+
+  // Update button enabled/disabled states
+  if (timelinePrevBtn) {
+    timelinePrevBtn.disabled = currentIndex <= 0;
+  }
+  if (timelineNextBtn) {
+    timelineNextBtn.disabled = currentIndex >= blocksOrder.length - 1;
+  }
+  if (timelineLatestBtn) {
+    if (currentIndex < blocksOrder.length - 1) {
+      timelineLatestBtn.classList.remove('hidden');
+    } else {
+      timelineLatestBtn.classList.add('hidden');
     }
-    let displayText = label;
-    if (displayText.length > 22) {
-      displayText = displayText.slice(0, 20) + '...';
-    }
-    tab.textContent = displayText;
-    tab.title = label;
-    tab.onclick = () => {
+  }
+
+  // Render dots for each generation in chronological sequence
+  blocksOrder.forEach((id, idx) => {
+    const block = blocksStore.get(id);
+    const dot = document.createElement('div');
+    const isLatest = idx === blocksOrder.length - 1;
+    const isActive = idx === currentIndex;
+
+    dot.className = `timeline-dot ${isActive ? 'active' : ''} ${isLatest ? 'latest' : ''}`;
+    const title = block ? (block.title || block.kind) : `Version ${idx + 1}`;
+    dot.title = `Step ${idx + 1} of ${blocksOrder.length}: ${title}${isLatest ? ' (Latest)' : ''}`;
+
+    dot.addEventListener('click', () => {
       activeBlockId = id;
       renderNeonSquare();
-    };
-    visualTabs.appendChild(tab);
+    });
+
+    timelineScrubber.appendChild(dot);
+  });
+
+  // Step counter label
+  const counterLabel = document.createElement('span');
+  counterLabel.className = 'timeline-label';
+  counterLabel.textContent = `${currentIndex + 1}/${blocksOrder.length}`;
+  timelineScrubber.appendChild(counterLabel);
+}
+
+// Timeline Navigation Click Handlers
+if (timelinePrevBtn) {
+  timelinePrevBtn.addEventListener('click', () => {
+    const currentIndex = blocksOrder.indexOf(activeBlockId);
+    if (currentIndex > 0) {
+      activeBlockId = blocksOrder[currentIndex - 1];
+      renderNeonSquare();
+    }
+  });
+}
+
+if (timelineNextBtn) {
+  timelineNextBtn.addEventListener('click', () => {
+    const currentIndex = blocksOrder.indexOf(activeBlockId);
+    if (currentIndex >= 0 && currentIndex < blocksOrder.length - 1) {
+      activeBlockId = blocksOrder[currentIndex + 1];
+      renderNeonSquare();
+    }
+  });
+}
+
+if (timelineLatestBtn) {
+  timelineLatestBtn.addEventListener('click', () => {
+    if (blocksOrder.length > 0) {
+      activeBlockId = blocksOrder[blocksOrder.length - 1];
+      renderNeonSquare();
+    }
   });
 }
 
 // =========================================================================
-// Interactive Click / Drill-In Listener
+// Interactive Click / Drill-In Listener & Element Modal
 // =========================================================================
 
+function openElementModal(data) {
+  currentModalElement = data;
+  if (!elementModal) return;
+
+  if (elementModalTitle) {
+    elementModalTitle.textContent = data.label || `STEP: ${data.id}`;
+  }
+  if (elementModalShapeBadge) {
+    elementModalShapeBadge.textContent = (data.shape || 'STEP').toUpperCase();
+  }
+  if (elementModalDesc) {
+    elementModalDesc.textContent = data.note || 'No additional details provided for this element.';
+  }
+  if (elementModalImgContainer && elementModalImg) {
+    if (data.img && data.img !== 'loading' && (data.img.startsWith('http') || data.img.startsWith('/'))) {
+      elementModalImg.src = data.img;
+      elementModalImgContainer.classList.remove('hidden');
+    } else {
+      elementModalImgContainer.classList.add('hidden');
+    }
+  }
+
+  elementModal.classList.remove('hidden');
+}
+
+function closeElementModal() {
+  if (elementModal) {
+    elementModal.classList.add('hidden');
+  }
+  currentModalElement = null;
+}
+
+if (closeElementModalBtn) {
+  closeElementModalBtn.addEventListener('click', closeElementModal);
+}
+if (elementModal) {
+  elementModal.addEventListener('click', (e) => {
+    if (e.target === elementModal) closeElementModal();
+  });
+}
+
+if (elementIllustrateBtn) {
+  elementIllustrateBtn.addEventListener('click', () => {
+    if (!currentModalElement) return;
+    const { blockId, id, label, note } = currentModalElement;
+    closeElementModal();
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'illustrate_step',
+        block_id: blockId,
+        node_label: label || id,
+        visual_description: note,
+      }));
+      setSpeechBubble(`🎨 Generating Nano Banana visual illustration for "${label || id}"...`);
+      setAvatarState('thinking');
+    }
+  });
+}
+
+if (elementExplainBtn) {
+  elementExplainBtn.addEventListener('click', () => {
+    if (!currentModalElement) return;
+    const { blockId, id, label } = currentModalElement;
+    closeElementModal();
+
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'inspect',
+        block_id: blockId,
+        ref: id,
+        mode: 'words',
+      }));
+      setSpeechBubble(`💬 Generating verbal explanation for "${label || id}"...`);
+      setAvatarState('thinking');
+    }
+  });
+}
+
 neonCanvasContent.addEventListener('click', (event) => {
+  if (!activeBlockId) return;
+
+  // Check if click was on "Show more ▾" or on a Flow node card
+  const showMoreBtn = event.target.closest('[data-action="show-more"]');
+  const nodeGroup = event.target.closest('.flow-node-group') || event.target.closest('[data-node-id]');
+
+  if (showMoreBtn || nodeGroup) {
+    event.stopPropagation();
+    const elem = showMoreBtn || nodeGroup;
+    const nodeId = elem.getAttribute('data-node-id') || elem.getAttribute('data-ref') || '';
+    const nodeLabel = elem.getAttribute('data-node-label') || '';
+    const nodeNote = elem.getAttribute('data-node-note') || '';
+    const nodeShape = elem.getAttribute('data-node-shape') || 'step';
+    const nodeImg = elem.getAttribute('data-node-img') || '';
+
+    openElementModal({
+      id: nodeId,
+      label: nodeLabel,
+      note: nodeNote,
+      shape: nodeShape,
+      img: nodeImg,
+      blockId: activeBlockId,
+    });
+    return;
+  }
+
   const refElem = event.target.closest('[data-ref]');
-  if (!refElem || !activeBlockId) return;
+  if (!refElem) return;
 
   const ref = refElem.getAttribute('data-ref');
 
@@ -340,13 +779,16 @@ neonCanvasContent.addEventListener('click', (event) => {
       }));
     }
   } else {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        type: 'inspect',
-        block_id: activeBlockId,
-        ref: ref,
-      }));
-    }
+    // For general elements (e.g. table cells or answers), open detail modal
+    const cellText = refElem.textContent ? refElem.textContent.trim() : '';
+    openElementModal({
+      id: ref,
+      label: `Element: ${ref}`,
+      note: cellText || 'Detailed element inspection.',
+      shape: 'detail',
+      img: '',
+      blockId: activeBlockId,
+    });
   }
 });
 
@@ -355,6 +797,34 @@ neonCanvasContent.addEventListener('click', (event) => {
 // =========================================================================
 
 let speechRec = null;
+let speechDebounceTimer = null;
+let speechTurnStartTime = 0;
+let accumulatedSpeechTurn = '';
+
+function flushSpeechTurn(reason) {
+  if (speechDebounceTimer) {
+    clearTimeout(speechDebounceTimer);
+    speechDebounceTimer = null;
+  }
+  speechTurnStartTime = 0;
+  const finalUtterance = accumulatedSpeechTurn.trim();
+  accumulatedSpeechTurn = '';
+
+  if (finalUtterance && !isAudioPlaying) {
+    console.log(`[SpeechRec] Flushing turn (${reason}): "${finalUtterance}"`);
+    setAvatarState('thinking');
+    setSpeechBubble(`Heard: "${finalUtterance.slice(-45)}"`, 'thinking');
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({
+        type: 'transcript_event',
+        text: finalUtterance,
+        is_final: true,
+        immediate: true
+      }));
+    }
+  }
+}
+
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
 async function startRecording() {
@@ -378,7 +848,8 @@ async function startRecording() {
     pcmNode = new AudioWorkletNode(audioContext, 'pcm-worklet');
 
     pcmNode.port.onmessage = (event) => {
-      if (ws && ws.readyState === WebSocket.OPEN && isRecording) {
+      // Echo suppression: do not stream mic audio while robot is speaking
+      if (ws && ws.readyState === WebSocket.OPEN && isRecording && !isAudioPlaying) {
         ws.send(event.data);
       }
     };
@@ -386,35 +857,77 @@ async function startRecording() {
     source.connect(pcmNode);
     pcmNode.connect(audioContext.destination);
 
-    // Browser local SpeechRecognition for instant visual speech responsiveness
+    // Browser local SpeechRecognition with silence accumulation & debouncing
     if (SpeechRecognition && !speechRec) {
       speechRec = new SpeechRecognition();
       speechRec.continuous = true;
       speechRec.interimResults = true;
-      speechRec.lang = 'en-US';
+      speechRec.lang = currentLanguage || 'en-US';
 
       speechRec.onresult = (event) => {
+
+        // Echo suppression: ignore microphone while robot is speaking aloud
+        if (isAudioPlaying) return;
+
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           const res = event.results[i];
           if (res.isFinal) {
             const text = res[0].transcript.trim();
             if (text) {
-              setAvatarState('thinking');
-              setSpeechBubble(`Heard: "${text}"`, 'thinking');
-              if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true }));
+              if (!speechTurnStartTime) {
+                speechTurnStartTime = Date.now();
               }
+              accumulatedSpeechTurn = (accumulatedSpeechTurn + ' ' + text).trim();
             }
           } else {
             interim += res[0].transcript;
+            if (!speechTurnStartTime && interim.trim()) {
+              speechTurnStartTime = Date.now();
+            }
           }
         }
-        if (interim) {
+
+        if (interim || accumulatedSpeechTurn) {
           setAvatarState('listening');
-          setSpeechBubble(`Listening: "${interim.slice(-35)}"`, 'listening');
+          const currentDisplay = (accumulatedSpeechTurn ? accumulatedSpeechTurn + ' ' : '') + interim;
+          setSpeechBubble(`Listening: "${currentDisplay.slice(-45)}"`, 'listening');
+        }
+
+        // Rule: Start generating ONLY on speech stop (2s silence) OR every 15 seconds of continuous speech
+        if (accumulatedSpeechTurn) {
+          const elapsed = Date.now() - speechTurnStartTime;
+
+          // Condition 1: 15 seconds of continuous speech elapsed
+          if (speechTurnStartTime && elapsed >= 15000) {
+            flushSpeechTurn('15s continuous speech threshold');
+            return;
+          }
+
+          // Condition 2: Wait for speech stop (2.0s of silence after speech stops)
+          if (speechDebounceTimer) {
+            clearTimeout(speechDebounceTimer);
+          }
+          speechDebounceTimer = setTimeout(() => {
+            flushSpeechTurn('speech stop detected (2s silence)');
+          }, 2000);
         }
       };
+
+      // Browser VAD: fires when voice activity pauses/stops in microphone
+      speechRec.onspeechend = () => {
+        if (accumulatedSpeechTurn) {
+          console.log('[SpeechRec] onspeechend event triggered');
+          if (speechDebounceTimer) {
+            clearTimeout(speechDebounceTimer);
+          }
+          // Allow 2.0s silence to confirm speech stop
+          speechDebounceTimer = setTimeout(() => {
+            flushSpeechTurn('onspeechend (speech stopped for 2s)');
+          }, 2000);
+        }
+      };
+
 
       speechRec.onerror = (e) => console.warn('[SpeechRec] Event:', e.error);
       speechRec.onend = () => {
@@ -429,6 +942,7 @@ async function startRecording() {
         console.warn('[SpeechRec] Start error:', err);
       }
     }
+
 
     isRecording = true;
     micBtn.classList.add('recording');
@@ -445,6 +959,9 @@ async function startRecording() {
 
 async function stopRecording() {
   isRecording = false;
+  if (accumulatedSpeechTurn) {
+    flushSpeechTurn('mic stopped');
+  }
   if (speechRec) {
     try { speechRec.stop(); } catch (_) {}
     speechRec = null;
@@ -477,7 +994,15 @@ micBtn.addEventListener('click', () => {
 // Manual Input / Test Dispatcher
 // =========================================================================
 
+let chatDebounceTimer = null;
+let chatStartTime = 0;
+
 function sendManualTurn() {
+  if (chatDebounceTimer) {
+    clearTimeout(chatDebounceTimer);
+    chatDebounceTimer = null;
+  }
+  chatStartTime = 0;
   const text = manualTextInput.value.trim();
   if (!text) return;
 
@@ -485,10 +1010,42 @@ function sendManualTurn() {
   setSpeechBubble(`Sent: "${text}"`, 'thinking');
 
   if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true }));
+    ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true, immediate: true }));
   }
   manualTextInput.value = '';
 }
+
+// Rule: Send to Gemini every 15s or when chat typing stops for 2 seconds
+manualTextInput.addEventListener('input', () => {
+  const text = manualTextInput.value.trim();
+  if (!text) {
+    if (chatDebounceTimer) clearTimeout(chatDebounceTimer);
+    chatStartTime = 0;
+    return;
+  }
+
+  if (!chatStartTime) {
+    chatStartTime = Date.now();
+  }
+
+  const elapsed = Date.now() - chatStartTime;
+
+  // Condition 1: 15 seconds of continuous typing
+  if (elapsed >= 15000) {
+    console.log('[Chat] 15s continuous typing limit reached -> sending to Gemini');
+    sendManualTurn();
+    return;
+  }
+
+  // Condition 2: Chat input stops typing for 2 seconds
+  if (chatDebounceTimer) {
+    clearTimeout(chatDebounceTimer);
+  }
+  chatDebounceTimer = setTimeout(() => {
+    console.log('[Chat] Chat typing stopped for 2 seconds -> sending to Gemini');
+    sendManualTurn();
+  }, 2000);
+});
 
 sendManualBtn.addEventListener('click', sendManualTurn);
 manualTextInput.addEventListener('keydown', (e) => {
@@ -496,6 +1053,7 @@ manualTextInput.addEventListener('keydown', (e) => {
     sendManualTurn();
   }
 });
+
 
 // =========================================================================
 // Canvas Reset / Refresh Dispatcher (Dual-Path + Session Generation)
@@ -706,6 +1264,34 @@ if (exportJsonBtn) exportJsonBtn.addEventListener('click', exportJson);
 
 // Initialize on page load
 window.addEventListener('DOMContentLoaded', () => {
+  const uid = getOrCreateUserId();
+  if (guestIdDisplay) {
+    guestIdDisplay.textContent = 'ID: ' + uid;
+  }
+
+  // Sidebar Controls
+  if (newMeetingBtn) {
+    newMeetingBtn.addEventListener('click', createNewMeeting);
+  }
+  if (sidebarCollapseBtn) {
+    sidebarCollapseBtn.addEventListener('click', () => {
+      sidebar.classList.add('collapsed');
+      closeSidebarDrawer();
+    });
+  }
+  if (sidebarOpenBtn) {
+    sidebarOpenBtn.addEventListener('click', () => {
+      sidebar.classList.remove('collapsed');
+      sidebar.classList.add('open');
+      if (sidebarBackdrop) sidebarBackdrop.classList.remove('hidden');
+    });
+  }
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener('click', closeSidebarDrawer);
+  }
+
+  // Connect WebSocket & fetch meetings history
   connectWebSocket();
+  fetchSessions();
   setAvatarState('listening');
 });

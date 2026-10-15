@@ -53,7 +53,17 @@ def render_answer(data: Any) -> str:
         )
 
     visual_html = ""
-    if block.image_url:
+    if block.image_url in ("loading", "generating", "__loading__"):
+        visual_html = (
+            f'<div class="answer-visual-wrapper loading-shimmer" style="display:flex; flex-direction:column; justify-content:center; align-items:center; '
+            f'margin:1rem 0; padding:2rem 1.25rem; background:#050811; border:1px solid rgba(6,182,212,0.4); '
+            f'border-radius:12px; box-shadow:0 0 25px rgba(6,182,212,0.2); text-align:center;">'
+            f'<div class="spinner-circle" style="width:36px; height:36px; border:3px solid rgba(6,182,212,0.2); border-top-color:#06b6d4; border-radius:50%; animation:spin-slow 1s linear infinite; margin-bottom:0.85rem;"></div>'
+            f'<span style="font-family:var(--font-mono, monospace); font-size:0.85rem; color:#22d3ee; letter-spacing:0.06em; font-weight:700;">SYNTHESIZING NANO BANANA 2 LITE ILLUSTRATION...</span>'
+            f'<span style="font-size:0.75rem; color:#64748b; margin-top:0.35rem;">Reasoning &amp; speech emitted instantly • Streaming visual in background</span>'
+            f'</div>'
+        )
+    elif block.image_url:
         visual_html = (
             f'<div class="answer-visual-wrapper" style="display:flex; justify-content:center; align-items:center; '
             f'margin:1rem 0; padding:1.25rem; background:#000; border:1px solid rgba(6,182,212,0.3); '
@@ -62,27 +72,8 @@ def render_answer(data: Any) -> str:
             f'</div>'
         )
     else:
-        # Crisp schematic diagram vector fallback
-        visual_html = (
-            f'<div class="answer-visual-wrapper" style="display:flex; justify-content:center; align-items:center; '
-            f'margin:1rem 0; padding:1.25rem; background:#000; border:1px solid rgba(6,182,212,0.3); '
-            f'border-radius:12px; box-shadow:0 0 20px rgba(6,182,212,0.15);">'
-            f'<svg viewBox="0 0 320 100" width="320" height="100" style="max-width:100%; height:auto;">'
-            f'  <defs>'
-            f'    <marker id="ans-arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">'
-            f'      <path d="M 0 1.5 L 8 5 L 0 8.5 z" fill="#06b6d4" />'
-            f'    </marker>'
-            f'  </defs>'
-            f'  <rect x="15" y="25" width="90" height="50" rx="8" fill="#0b1324" stroke="#06b6d4" stroke-width="2"/>'
-            f'  <text x="60" y="55" fill="#f8fafc" font-size="11" text-anchor="middle" font-family="sans-serif">Question</text>'
-            f'  <path d="M 105 50 L 155 50" fill="none" stroke="#06b6d4" stroke-width="2" marker-end="url(#ans-arr)"/>'
-            f'  <circle cx="210" cy="50" r="30" fill="#0b1324" stroke="#10b981" stroke-width="2"/>'
-            f'  <text x="210" y="54" fill="#34d399" font-size="11" text-anchor="middle" font-family="sans-serif">Solution</text>'
-            f'  <path d="M 240 50 L 290 50" fill="none" stroke="#10b981" stroke-width="2" marker-end="url(#ans-arr)"/>'
-            f'  <rect x="290" y="40" width="20" height="20" rx="4" fill="#064e3b" stroke="#34d399" stroke-width="1.5"/>'
-            f'</svg>'
-            f'</div>'
-        )
+        # Pure explanation in words: do not render any fake dummy SVG diagram
+        visual_html = ""
 
     caption_text = block.visual_caption or block.answer
 

@@ -44,6 +44,7 @@ class CompareBlock(BaseModel):
     criteria: List[str] = Field(description="Criterion rows")
     cells: List[List[str]] = Field(description="cells[criterion_index][option_index]")
     recommendation: Optional[str] = Field(default=None, description="Recommended choice, if any")
+    image_url: Optional[str] = Field(default=None, description="Optional Nano Banana illustration or concept visual")
 
 
 # 3. Answer Block

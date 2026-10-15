@@ -23,10 +23,20 @@ def get_tts_client():
     return _tts_client
 
 
-def synthesize_speech(text: str) -> Optional[str]:
+def is_japanese_text(text: str) -> bool:
+    """Check if string contains Hiragana, Katakana, or Kanji characters."""
+    return any(
+        '\u3040' <= c <= '\u309f' or  # Hiragana
+        '\u30a0' <= c <= '\u30ff' or  # Katakana
+        '\u4e00' <= c <= '\u9fff'     # Kanji
+        for c in text
+    )
+
+
+def synthesize_speech(text: str, language_code: Optional[str] = None) -> Optional[str]:
     """
     Synthesizes text into MP3 audio and returns base64-encoded string.
-    Returns None if synthesis fails.
+    Auto-detects Japanese vs English if language_code is not specified.
     """
     if not text or not text.strip():
         return None
@@ -39,11 +49,21 @@ def synthesize_speech(text: str) -> Optional[str]:
         from google.cloud import texttospeech
 
         synthesis_input = texttospeech.SynthesisInput(text=text)
-        voice = texttospeech.VoiceSelectionParams(
-            language_code="en-US",
-            name="en-US-Journey-F",
-            ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
-        )
+
+        is_ja = language_code == "ja-JP" or (language_code is None and is_japanese_text(text))
+        if is_ja:
+            voice = texttospeech.VoiceSelectionParams(
+                language_code="ja-JP",
+                name="ja-JP-Neural2-B",
+                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+            )
+        else:
+            voice = texttospeech.VoiceSelectionParams(
+                language_code="en-US",
+                name="en-US-Journey-F",
+                ssml_gender=texttospeech.SsmlVoiceGender.FEMALE,
+            )
+
         audio_config = texttospeech.AudioConfig(
             audio_encoding=texttospeech.AudioEncoding.MP3,
             speaking_rate=1.05,
@@ -60,3 +80,4 @@ def synthesize_speech(text: str) -> Optional[str]:
     except Exception as e:
         logger.warning(f"TTS synthesis failed for text: '{text}' ({e})")
         return None
+

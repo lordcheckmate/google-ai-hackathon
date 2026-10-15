@@ -176,17 +176,25 @@ async def handle_inspect(sid: str, args: Dict[str, Any], ws_sender: Callable) ->
         })
         return {"status": "served_from_cache", "child_id": child_id}
 
+    mode = args.get("mode", "auto")
+
     # Resolve ref against stored JSON (Rule 2)
     resolved_subject, suggested_kind = resolve_ref_element(record["kind"], record["json"], ref)
     if not resolved_subject:
         return {"status": "error", "message": f"Ref '{ref}' does not address a real element in {block_id}"}
 
-    # Generate child block
+    visual_keywords = ("image", "picture", "photo", "banana", "logo", "icon", "mascot", "visual", "ui", "mockup", "sketch", "drawing", "portrait", "graphic", "screen", "wireframe", "avatar", "scene")
+    is_visual = any(vk in resolved_subject.lower() for vk in visual_keywords)
+
+    if mode == "illustrate" or (mode != "words" and is_visual):
+        return await handle_illustrate(sid, {"block_id": block_id, "node_label": resolved_subject, "ref": ref}, ws_sender)
+
+    # Generate child block (words explanation)
     child_id = f"sub_{block_id}_{ref.replace(':', '_')}"
     parent_ref = {"block_id": block_id, "ref": ref}
 
-    # Prompt instruction to explain this specific element
-    instruction = f"Explain in detail this specific element from {record['kind']} block: {resolved_subject}."
+    # Prompt instruction to explain this specific element verbally
+    instruction = f"Explain in detail this specific element from {record['kind']} block: {resolved_subject}. Provide a thorough conceptual breakdown, purpose, context, and key takeaways."
     history = get_transcript_history(sid)
     child_json = generate_block_json(suggested_kind, instruction, conversation_history=history)
     markup = render_block(suggested_kind, child_json)
@@ -207,7 +215,16 @@ async def handle_inspect(sid: str, args: Dict[str, Any], ws_sender: Callable) ->
         }
     })
 
+    spoken_msg = child_json.get("answer") or child_json.get("summary") or f"Here is the explanation for {resolved_subject}."
+    try:
+        from app.tts import synthesize_speech
+        audio_b64 = synthesize_speech(spoken_msg[:200])
+        await _safe_send_ws(ws_sender, {"type": "speak", "text": spoken_msg[:200], "audio": audio_b64})
+    except Exception:
+        pass
+
     return {"status": "created", "child_id": child_id, "kind": suggested_kind}
+
 
 
 async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
@@ -341,6 +358,7 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
             note or f"Workflow step for {lbl}"
         )
 
+        node["image_url"] = img_url
         tab_json = {
             "kind": "answer",
             "title": f"🖼️ Step {step_num}: {lbl[:20]}",
@@ -348,8 +366,8 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
             "answer": gen_desc or note or f"Detailed execution schematic for '{lbl}'.",
             "detail": f"Step {step_num} of {len(nodes)} in {block_json.get('title', 'Workflow')}.",
             "image_url": img_url,
-            "visual_caption": gen_desc or f"Gemini 2.5 Flash Image (Nano Banana) illustration for {lbl}.",
-            "sources": [{"title": "Gemini 2.5 Flash Image (Nano Banana)", "url": img_url}],
+            "visual_caption": gen_desc or f"Gemini 3.1 Flash Lite Image (Nano Banana 2 Lite) illustration for {lbl}.",
+            "sources": [{"title": "Gemini 3.1 Flash-Lite Image", "url": img_url}],
             "confidence": "high",
         }
         save_block(sid, tab_id, "answer", tab_json, parent={"block_id": target_block["id"], "ref": node_id})
@@ -367,6 +385,21 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
             }
         })
         last_tab_id = tab_id
+
+    # Update the parent flow diagram so the pictures appear directly over/inside the step cards
+    if target_block and target_block.get("kind") == "flow":
+        save_block(sid, target_block["id"], "flow", block_json)
+        parent_markup = render_block("flow", block_json)
+        await _safe_send_ws(ws_sender, {
+            "type": "block_upsert",
+            "block": {
+                "id": target_block["id"],
+                "kind": "flow",
+                "title": block_json.get("title", "Flow"),
+                "html": parent_markup,
+                "json": block_json,
+            }
+        })
 
     spoken_text = f"Generated visual illustration in a separate tab at the top."
     try:
@@ -407,17 +440,21 @@ async def handle_highlight(sid: str, args: Dict[str, Any], ws_sender: Callable) 
 
     kind = target_block["kind"]
     block_json = target_block["json"]
-    norm_labels = [str(l).strip().lower() for l in labels]
+
+    from app.matcher import match_items, remove_step_from_flow, remove_item_from_checklist
 
     if kind == "flow":
-        for node in block_json.get("nodes", []):
-            node_label = str(node.get("label", "")).strip().lower()
-            node_id = str(node.get("id", "")).strip().lower()
-            node["highlight"] = any(nl in node_label or nl == node_id for nl in norm_labels)
+        nodes = block_json.get("nodes", [])
+        matched = match_items(labels, nodes, text_key="label", id_key="id")
+        matched_ids = {n.get("id") for n in matched}
+        for node in nodes:
+            node["highlight"] = node.get("id") in matched_ids
     elif kind == "checklist":
-        for item in block_json.get("items", []):
-            txt = str(item.get("text", "")).strip().lower()
-            item["highlight"] = any(nl in txt for nl in norm_labels)
+        items = block_json.get("items", [])
+        matched = match_items(labels, items, text_key="text", id_key="id")
+        matched_set = {id(it) for it in matched}
+        for item in items:
+            item["highlight"] = id(item) in matched_set
 
     markup = render_block(kind, block_json)
     save_block(sid, block_id, kind, block_json, parent=target_block.get("parent"))
@@ -434,6 +471,134 @@ async def handle_highlight(sid: str, args: Dict[str, Any], ws_sender: Callable) 
         }
     })
     return {"status": "ok", "block_id": block_id, "highlighted": labels}
+
+
+async def handle_remove(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
+    """
+    Handles removing either a step inside a flow/checklist OR an entire block.
+    Distinguishes between 'remove step X' vs 'remove diagram Y'.
+    """
+    target = args.get("target", "").strip()
+    block_id = args.get("block_id")
+    blocks = get_blocks(sid)
+    if not blocks:
+        return {"status": "error", "message": "No blocks on canvas"}
+
+    from app.matcher import remove_step_from_flow, remove_item_from_checklist
+
+    target_lower = target.lower()
+
+    # Check if target explicitly refers to an entire block/diagram
+    matched_block = None
+    if block_id:
+        matched_block = get_block(sid, block_id)
+
+    if not matched_block:
+        for b in reversed(blocks):
+            b_id = b.get("id", "").lower()
+            b_title = b.get("json", {}).get("title", "").lower()
+            if target_lower == b_id or target_lower == b_title:
+                matched_block = b
+                break
+
+    is_block_removal = (
+        matched_block is not None
+        and any(w in target_lower for w in ["diagram", "workflow", "card", "block", "canvas", "table"])
+    )
+
+    if is_block_removal and matched_block:
+        delete_block(sid, matched_block["id"])
+        await ws_sender({
+            "type": "block_remove",
+            "block_id": matched_block["id"],
+        })
+        return {"status": "ok", "action": "removed_block", "block_id": matched_block["id"]}
+
+    # Otherwise, attempt step/item removal from active flow or checklist
+    active_block = None
+    if block_id:
+        active_block = get_block(sid, block_id)
+    if not active_block:
+        for b in reversed(blocks):
+            if b.get("kind") in ("flow", "checklist"):
+                active_block = b
+                break
+    if not active_block:
+        active_block = blocks[-1]
+
+    kind = active_block.get("kind")
+    block_json = active_block.get("json", {})
+    orig_id = active_block.get("id", "")
+
+    if kind == "flow":
+        updated_flow, removed_node = remove_step_from_flow(block_json, target)
+        if removed_node:
+            base_id = re.sub(r"_v\d+$", "", orig_id)
+            matching_versions = [b for b in blocks if re.sub(r"_v\d+$", "", b.get("id", "")) == base_id]
+            next_version = len(matching_versions) + 1
+            new_block_id = f"{base_id}_v{next_version}"
+
+            raw_title = updated_flow.get("title") or "Workflow"
+            raw_title_clean = re.sub(r"\s*\(v\d+\)$", "", raw_title)
+            versioned_title = f"{raw_title_clean} (v{next_version})"
+            updated_flow["title"] = versioned_title
+
+            markup = render_block("flow", updated_flow)
+            save_block(sid, new_block_id, "flow", updated_flow, parent=active_block.get("parent"))
+
+            await ws_sender({
+                "type": "block_upsert",
+                "block": {
+                    "id": new_block_id,
+                    "kind": "flow",
+                    "title": versioned_title,
+                    "html": markup,
+                    "parent": active_block.get("parent"),
+                    "json": updated_flow,
+                }
+            })
+            return {"status": "ok", "action": "removed_step", "step": removed_node.get("label"), "block_id": new_block_id}
+
+    elif kind == "checklist":
+        updated_chk, removed_item = remove_item_from_checklist(block_json, target)
+        if removed_item:
+            base_id = re.sub(r"_v\d+$", "", orig_id)
+            matching_versions = [b for b in blocks if re.sub(r"_v\d+$", "", b.get("id", "")) == base_id]
+            next_version = len(matching_versions) + 1
+            new_block_id = f"{base_id}_v{next_version}"
+
+            raw_title = updated_chk.get("title") or "Checklist"
+            raw_title_clean = re.sub(r"\s*\(v\d+\)$", "", raw_title)
+            versioned_title = f"{raw_title_clean} (v{next_version})"
+            updated_chk["title"] = versioned_title
+
+            markup = render_block("checklist", updated_chk)
+            save_block(sid, new_block_id, "checklist", updated_chk, parent=active_block.get("parent"))
+
+            await ws_sender({
+                "type": "block_upsert",
+                "block": {
+                    "id": new_block_id,
+                    "kind": "checklist",
+                    "title": versioned_title,
+                    "html": markup,
+                    "parent": active_block.get("parent"),
+                    "json": updated_chk,
+                }
+            })
+            return {"status": "ok", "action": "removed_item", "item": removed_item.get("text"), "block_id": new_block_id}
+
+    # If step wasn't found but a block matched the name:
+    if matched_block:
+        delete_block(sid, matched_block["id"])
+        await ws_sender({
+            "type": "block_remove",
+            "block_id": matched_block["id"],
+        })
+        return {"status": "ok", "action": "removed_block", "block_id": matched_block["id"]}
+
+    return {"status": "error", "message": f"Could not find step or block matching '{target}'"}
+
 
 
 def resolve_ref_element(kind: str, block_json: Dict[str, Any], ref: str) -> Tuple[Optional[str], str]:
@@ -514,6 +679,8 @@ COMMANDS: Dict[str, Callable] = {
     "illustrate_step": handle_illustrate,
     "illustrate": handle_illustrate,
     "highlight": handle_highlight,
+    "remove": handle_remove,
+    "delete": handle_remove,
 }
 
 
@@ -522,16 +689,34 @@ COMMANDS: Dict[str, Callable] = {
 # =========================================================================
 
 VOICE_PATTERNS = [
+    # English commands
     (r"\b(?:start session|resume session|start meeting|resume meeting)\b", "start_session", lambda m, sid: {}),
     (r"\b(?:pause session|stop session|pause meeting)\b", "pause_session", lambda m, sid: {}),
     (r"\b(?:end session|finish session|end meeting)\b", "end_session", lambda m, sid: {}),
     (r"\b(?:undo that|undo|revert)\b", "undo", lambda m, sid: {}),
     (r"\b(?:clear canvas|clear screen|clear all)\b", "clear", lambda m, sid: {}),
     (r"\b(?:highlight|focus on|emphasize)\s+([a-zA-Z0-9_\-\s]+)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
-    (r"\b(?:illustrate|draw picture for|add picture to|generate image for|draw icon for|nano banana for)\s+([a-zA-Z0-9_\-\s]+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
-    (r"\b(?:illustrate steps?|illustrate flow|draw pictures?|add pictures?|nano banana)\b", "illustrate_step", lambda m, sid: {}),
+    (r"\b(?:remove|delete|take out|drop|get rid of)\s+(?:the\s+)?(?:step\s+)?([a-zA-Z0-9_\-\s]+)", "remove", lambda m, sid: {"target": m.group(1).strip()}),
+    (r"^(?:\s*please\s+)?(?:illustrate|draw picture for|add picture to|generate image for|draw icon for|nano banana for)\s+([a-zA-Z0-9_\-\s]+)\.?$", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+    (r"^(?:\s*please\s+)?(?:illustrate steps?|illustrate flow|draw pictures?|add pictures?|nano banana)\s*\.?$", "illustrate_step", lambda m, sid: {}),
     (r"(?:tell me more about|explain|inspect)\s+([a-zA-Z0-9_\-\s]+)", "inspect", lambda m, sid: resolve_voice_inspect_args(sid, m.group(1).strip())),
+
+    # Japanese commands (日本語音声コマンド)
+    (r"(?:ミーティング開始|セッション開始|会議開始|再開)", "start_session", lambda m, sid: {}),
+    (r"(?:ミーティング一時停止|セッション一時停止|一時停止|ストップ)", "pause_session", lambda m, sid: {}),
+    (r"(?:ミーティング終了|セッション終了|会議終了|終了)", "end_session", lambda m, sid: {}),
+    (r"(?:元に戻して|アンドゥ|取り消し)", "undo", lambda m, sid: {}),
+    (r"(?:キャンバスをクリア|画面をクリア|全て消して|クリア)", "clear", lambda m, sid: {}),
+    (r"(?:ハイライト|強調して|注目して)\s*(.+)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
+    (r"(.+?)(?:を|のステップを)(?:ハイライト|強調)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
+    (r"(?:削除|消して|外して|除外して)\s*(.+)", "remove", lambda m, sid: {"target": m.group(1).strip()}),
+    (r"(.+?)(?:を|のステップを)(?:削除|消して|外して)", "remove", lambda m, sid: {"target": m.group(1).strip()}),
+    (r"(?:イラスト|絵を描いて|ナノバナナ|図解して)\s*(.+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+    (r"(.+?)(?:の|を)(?:イラスト|絵を描いて|図解)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+    (r"(?:詳しく教えて|説明して|詳細)\s*(.+)", "inspect", lambda m, sid: resolve_voice_inspect_args(sid, m.group(1).strip())),
 ]
+
+
 
 
 def resolve_voice_inspect_args(sid: str, query: str) -> Dict[str, Any]:

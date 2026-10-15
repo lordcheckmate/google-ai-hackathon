@@ -8,16 +8,65 @@
 </head>
 <body>
 
-  <!-- TOP DECK: Agent Robot Avatar & Minimal Controls ONLY -->
-  <header class="top-deck">
-    <div class="agent-identity">
-      <!-- Animated Character Avatar Widget -->
-      <div id="character-wrapper" class="character-wrapper">
-        <svg id="char-svg" viewBox="0 0 60 60" class="char-svg">
-          <!-- Head Base & Ears -->
-          <rect x="8" y="10" width="44" height="40" rx="12" fill="#090d16" stroke="#06b6d4" stroke-width="2" id="char-head-border" />
-          <rect x="4" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-l" />
-          <rect x="52" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-r" />
+  <div class="app-layout">
+    <!-- Backdrop for mobile drawer -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop hidden"></div>
+
+    <!-- LEFT SIDEBAR: Gemini Chat Style Sessions & Navigation -->
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-top">
+        <div class="sidebar-header">
+          <div class="sidebar-brand">
+            <span class="brand-glyph">✦</span>
+            <span class="brand-name">AEGIS</span>
+          </div>
+          <button id="sidebar-collapse-btn" class="sidebar-icon-btn" title="Collapse sidebar">
+            <span>❮</span>
+          </button>
+        </div>
+
+        <button id="new-meeting-btn" class="new-meeting-btn" title="Start a fresh meeting">
+          <span class="new-meeting-plus">+</span>
+          <span class="new-meeting-label">New Meeting</span>
+        </button>
+      </div>
+
+      <!-- Past Sessions List -->
+      <div class="sidebar-sessions-wrap">
+        <div class="sidebar-section-title">YOUR MEETINGS</div>
+        <div id="sessions-list" class="sessions-list">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Footer: Private Guest Workspace -->
+      <div class="sidebar-footer">
+        <div class="guest-badge">
+          <div class="guest-avatar">👤</div>
+          <div class="guest-details">
+            <span class="guest-title">Private Workspace</span>
+            <span id="guest-id-display" class="guest-id">Device Isolated</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT WRAPPER -->
+    <div class="main-wrapper" id="main-wrapper">
+
+      <!-- TOP DECK: Agent Robot Avatar & Minimal Controls ONLY -->
+      <header class="top-deck">
+        <button id="sidebar-open-btn" class="sidebar-open-btn" title="Open sidebar">
+          <span>☰</span>
+        </button>
+        <div class="agent-identity">
+          <!-- Animated Character Avatar Widget -->
+          <div id="character-wrapper" class="character-wrapper">
+            <svg id="char-svg" viewBox="0 0 60 60" class="char-svg">
+              <!-- Head Base & Ears -->
+              <rect x="8" y="10" width="44" height="40" rx="12" fill="#090d16" stroke="#06b6d4" stroke-width="2" id="char-head-border" />
+              <rect x="4" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-l" />
+              <rect x="52" y="24" width="4" height="12" rx="2" fill="#06b6d4" id="char-ear-r" />
           <rect x="14" y="18" width="32" height="18" rx="6" fill="#000000" id="char-visor" />
 
           <!-- Eye State 1: Listening (Cyan Pulsing Bars) -->
@@ -77,10 +126,20 @@
         <span id="ws-status">Connecting...</span>
       </div>
 
+      <!-- Language Selector (English / 日本語) -->
+      <div class="lang-select-wrap" title="Assistant & Speech Recognition Language">
+        <span class="lang-icon">🌐</span>
+        <select id="lang-select" class="lang-select" aria-label="Language Selector">
+          <option value="en-US">EN (English)</option>
+          <option value="ja-JP">JA (日本語)</option>
+        </select>
+      </div>
+
       <button class="mic-btn" id="mic-btn" title="Toggle audio recording">
         <span id="mic-icon">🎙️</span>
         <span id="mic-text">Mic: Passive</span>
       </button>
+
 
       <button class="export-btn" id="export-btn" title="Export meeting artifacts (Markdown, SVG, JSON)">
         <span>💾</span>
@@ -110,8 +169,14 @@
           <span id="active-visual-title" class="active-visual-title">NEON VISUAL CANVAS</span>
           <span id="active-visual-badge" class="active-visual-badge">STANDBY</span>
         </div>
-        <div id="visual-tabs" class="visual-tabs">
-          <!-- Dynamic tabs for switching visuals when multiple exist -->
+        <!-- Timeline Navigation (Always shows latest by default, allows scrubbing back) -->
+        <div id="timeline-bar" class="timeline-bar hidden">
+          <button id="timeline-prev-btn" class="timeline-btn" title="View previous generation">◀ Older</button>
+          <div class="timeline-scrubber" id="timeline-scrubber">
+            <!-- Timeline dots rendered by JS -->
+          </div>
+          <button id="timeline-next-btn" class="timeline-btn" title="View newer generation">Newer ▶</button>
+          <button id="timeline-latest-btn" class="timeline-latest-btn hidden" title="Jump to latest generation">⚡ Live</button>
         </div>
       </div>
 
@@ -140,6 +205,8 @@
 
     </div>
   </main>
+  </div> <!-- .main-wrapper -->
+  </div> <!-- .app-layout -->
 
   <!-- Export Modal Dialog -->
   <div id="export-modal" class="modal-overlay hidden">
@@ -186,6 +253,53 @@
     </div>
   </div>
 
-  <script src="/static/app.js?v=1.2"></script>
+  <!-- Element Details Modal (Show More / Nano Banana / Explain in Words) -->
+  <div id="element-modal" class="modal-overlay hidden">
+    <div class="modal-box element-modal-box">
+      <div class="modal-header">
+        <div class="element-modal-title-group">
+          <span id="element-modal-shape-badge" class="element-stage-badge">STEP</span>
+          <h3 id="element-modal-title" class="modal-title">STEP DETAILS</h3>
+        </div>
+        <button id="close-element-modal" class="modal-close-btn" aria-label="Close">&times;</button>
+      </div>
+
+      <div class="element-modal-body">
+        <!-- Optional Thumbnail preview if image exists -->
+        <div id="element-modal-img-container" class="element-modal-img-container hidden">
+          <img id="element-modal-img" src="" alt="Element Visual" />
+          <div class="element-modal-img-badge">🎨 Nano Banana Visual</div>
+        </div>
+
+        <div class="element-content-section">
+          <h4 class="element-section-label">PROCESS CONTENT / NOTE</h4>
+          <div id="element-modal-desc" class="element-note-box"></div>
+        </div>
+      </div>
+
+      <div class="element-modal-actions">
+        <button id="element-illustrate-btn" class="element-action-btn element-action-illustrate">
+          <span class="btn-icon">🎨</span>
+          <div class="btn-text">
+            <strong>Generate Nano Banana Visual</strong>
+            <small>Create AI visual illustration explaining this step</small>
+          </div>
+        </button>
+
+        <button id="element-explain-btn" class="element-action-btn element-action-explain">
+          <span class="btn-icon">💬</span>
+          <div class="btn-text">
+            <strong>Explain in Words (AI)</strong>
+            <small>Detailed text breakdown & Q&A explanation</small>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=1.7"></script>
 </body>
 </html>
+
+
+

@@ -38,13 +38,13 @@ def render_flow(data: Any) -> str:
     if not nodes:
         return "<div class='flow-empty' style='color:#8b949e;padding:1rem;'>No steps recorded yet.</div>"
 
-    node_width = 300
-    node_height = 84
+    node_width = 330
+    node_height = 96
     x_center = 360
     x_left = 180
     x_right = 540
     y_start = 45
-    y_gap = 135
+    y_gap = 145
 
     # Compute node positions
     positions: Dict[str, Tuple[float, float, float, float]] = {}  # id -> (x, y, w, h)
@@ -173,6 +173,11 @@ def render_flow(data: Any) -> str:
 
         svg_parts.append(
             f'<g class="{group_class}" data-ref="{html.escape(node.id)}" '
+            f'data-node-id="{html.escape(node.id)}" '
+            f'data-node-label="{html.escape(node.label)}" '
+            f'data-node-note="{html.escape(node.note or "")}" '
+            f'data-node-shape="{html.escape(node.shape)}" '
+            f'data-node-img="{html.escape(node.image_url or "")}" '
             f'style="cursor: pointer; animation-delay: {anim_delay};">'
         )
 
@@ -196,31 +201,87 @@ def render_flow(data: Any) -> str:
                 f'fill="{fill_color}" stroke="{stroke_color}" stroke-width="{stroke_width}" />'
             )
 
-        # Clean centered layout for process diagram cards (illustrations live in dedicated tabs!)
-        text_x = nx + nw / 2
-        text_anchor = "middle"
-        max_title_w = 26
-        max_note_w = 34
+        # Render Nano Banana picture over/inside diagram step card if present
+        has_img = bool(node.image_url and node.image_url != "loading")
+        if has_img:
+            clip_id = f"clip_{node.id}_{i}"
+            img_size = 68
+            img_x = nx + 12
+            img_y = ny + (nh - img_size) / 2
+            svg_parts.append(
+                f'<defs><clipPath id="{clip_id}">'
+                f'<rect x="{img_x}" y="{img_y}" width="{img_size}" height="{img_size}" rx="8" />'
+                f'</clipPath></defs>'
+            )
+            svg_parts.append(
+                f'<image href="{html.escape(node.image_url)}" x="{img_x}" y="{img_y}" '
+                f'width="{img_size}" height="{img_size}" clip-path="url(#{clip_id})" '
+                f'preserveAspectRatio="xMidYMid slice" />'
+            )
+            svg_parts.append(
+                f'<rect x="{img_x}" y="{img_y}" width="{img_size}" height="{img_size}" rx="8" '
+                f'fill="none" stroke="#06b6d4" stroke-width="1.5" />'
+            )
+            text_x = nx + 92
+            text_anchor = "start"
+            max_title_w = 21
+            max_note_w = 26
+        elif node.image_url == "loading":
+            img_size = 58
+            img_x = nx + 12
+            img_y = ny + (nh - img_size) / 2
+            svg_parts.append(
+                f'<rect x="{img_x}" y="{img_y}" width="{img_size}" height="{img_size}" rx="8" '
+                f'fill="#0a192f" stroke="#38bdf8" stroke-width="1.2" stroke-dasharray="4 2" />'
+            )
+            svg_parts.append(
+                f'<text x="{img_x + img_size/2}" y="{img_y + img_size/2 + 4}" text-anchor="middle" '
+                f'fill="#38bdf8" font-size="10" font-weight="600">🎨 NB...</text>'
+            )
+            text_x = nx + 82
+            text_anchor = "start"
+            max_title_w = 21
+            max_note_w = 26
+        else:
+            text_x = nx + nw / 2
+            text_anchor = "middle"
+            max_title_w = 28
+            max_note_w = 36
 
-        # Wrap Title without clipping
-        title_lines = wrap_text(node.label, width=max_title_w)
-        # Wrap Note without clipping (NO TRUNCATION!)
-        note_lines = wrap_text(node.note, width=max_note_w) if node.note else []
+        # Title: limit to 2 lines max
+        raw_title_lines = wrap_text(node.label, width=max_title_w)
+        if len(raw_title_lines) > 2:
+            title_lines = [raw_title_lines[0], raw_title_lines[1][:max_title_w - 3] + "..."]
+        else:
+            title_lines = raw_title_lines
 
-        total_lines = len(title_lines) + len(note_lines)
-        line_height = 16
-        start_y = ny + (nh - (total_lines * line_height)) / 2 + 13
+        # Note: limit to at most 2 lines, determine if "Show more" is needed
+        raw_note_lines = wrap_text(node.note, width=max_note_w) if node.note else []
+        max_note_display = 2 if len(title_lines) <= 1 else 1
+        has_more = len(raw_note_lines) > max_note_display or len(node.note or "") > 55
 
-        curr_text_y = start_y
+        if has_more:
+            note_lines = raw_note_lines[:max_note_display]
+            if note_lines:
+                note_lines[-1] = note_lines[-1][:max_note_w - 3] + "..."
+        else:
+            note_lines = raw_note_lines[:max_note_display]
+
+        line_h = 16
+        # Start safely inside the card
+        text_start_y = ny + 26 if len(title_lines) == 1 else ny + 20
+        curr_text_y = text_start_y
+
         for t_line in title_lines:
             svg_parts.append(
                 f'<text x="{text_x}" y="{curr_text_y}" text-anchor="{text_anchor}" '
-                f'fill="#f8fafc" font-weight="700" font-size="13" '
+                f'fill="#f8fafc" font-weight="700" font-size="12.5" '
                 f'font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">'
                 f'{html.escape(t_line)}</text>'
             )
-            curr_text_y += line_height
+            curr_text_y += line_h
 
+        curr_text_y += 2
         for n_line in note_lines:
             svg_parts.append(
                 f'<text x="{text_x}" y="{curr_text_y}" text-anchor="{text_anchor}" '
@@ -228,7 +289,29 @@ def render_flow(data: Any) -> str:
                 f'font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">'
                 f'{html.escape(n_line)}</text>'
             )
-            curr_text_y += line_height
+            curr_text_y += 14
+
+        # Render "Show more" button on card if content exceeded box
+        if has_more:
+            btn_w = 76
+            btn_h = 18
+            btn_x = nx + nw - btn_w - 10
+            btn_y = ny + nh - btn_h - 7
+            svg_parts.append(
+                f'<g class="flow-show-more-btn" data-action="show-more" data-ref="{html.escape(node.id)}" '
+                f'data-node-id="{html.escape(node.id)}" '
+                f'data-node-label="{html.escape(node.label)}" '
+                f'data-node-note="{html.escape(node.note or "")}" '
+                f'data-node-shape="{html.escape(node.shape)}" '
+                f'data-node-img="{html.escape(node.image_url or "")}" '
+                f'style="cursor: pointer;">'
+                f'<rect x="{btn_x}" y="{btn_y}" width="{btn_w}" height="{btn_h}" rx="5" '
+                f'fill="#081829" stroke="#06b6d4" stroke-width="1.2" />'
+                f'<text x="{btn_x + btn_w / 2}" y="{btn_y + 12}" text-anchor="middle" '
+                f'fill="#38bdf8" font-size="9" font-weight="700" '
+                f'font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif">Show more ▾</text>'
+                f'</g>'
+            )
 
         svg_parts.append('</g>')
 

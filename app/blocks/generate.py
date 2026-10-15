@@ -53,7 +53,7 @@ def generate_block_json(
         raise ValueError(f"Unknown block kind: {kind}")
 
     schema_cls, _ = BLOCK_REGISTRY[kind]
-    context_text = "\n".join([f"- {h}" for h in conversation_history[-10:]]) if conversation_history else ""
+    context_text = "\n".join([f"- {h}" for h in conversation_history[-1000:]]) if conversation_history else ""
 
     # Attempt to call Gemini via warm pooled client
     try:
@@ -68,8 +68,10 @@ def generate_block_json(
                 f"Crucial Requirement for Answers and Explanations:\n"
                 f"Explain the answer thoroughly USING THE WHOLE CONTEXT of the conversation that happened.\n"
                 f"Never give a naked number, single word, or generic placeholder. Reference what was discussed in the meeting.\n"
+                f"LANGUAGE ADAPTATION: Generate titles, labels, notes, questions, and items in the SAME language as the meeting conversation. If the conversation or instruction is in Japanese, output all labels and notes in natural, clean Japanese. If in English, output in English.\n"
                 f"Never emit HTML or SVG markup. Output strictly valid JSON matching the schema."
             )
+
 
             user_content = (
                 f"MEETING CONVERSATION CONTEXT (WHAT HAPPENED SO FAR):\n{context_text or '(None recorded yet)'}\n\n"
@@ -91,13 +93,6 @@ def generate_block_json(
 
             if response.text:
                 parsed = json.loads(response.text)
-                if kind == "answer" and not parsed.get("image_url"):
-                    from app.images import generate_step_image
-                    q = parsed.get("question", instruction)
-                    a = parsed.get("answer", "")
-                    parsed["image_url"] = generate_step_image(q[:40], f"Diagram illustrating {a[:80]}", context=context_text)
-                    if not parsed.get("visual_caption"):
-                        parsed["visual_caption"] = a
                 # Validate against schema
                 validated = schema_cls.model_validate(parsed)
                 return validated.model_dump(by_alias=True)
@@ -128,6 +123,13 @@ def fallback_block_synthesizer(
         phrases = [p.strip().capitalize() for p in raw_text.split("->") if p.strip()]
 
         if not phrases:
+            if not existing_block:
+                return FlowBlock(
+                    kind="flow",
+                    title="Process Workflow",
+                    nodes=[],
+                    edges=[],
+                ).model_dump(by_alias=True)
             phrases = [instruction[:40].capitalize()]
 
         for phrase in phrases:

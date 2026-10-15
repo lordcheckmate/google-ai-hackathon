@@ -54,8 +54,25 @@ def render_compare(data: Any) -> str:
             f'💡 <strong>Recommendation:</strong> {rec_esc}</div>'
         )
 
+    img_html = ""
+    if getattr(block, "image_url", None) and block.image_url != "loading":
+        img_html = (
+            f'<div class="compare-visual-banner" style="margin-bottom:1rem; text-align:center;">'
+            f'<img src="{html.escape(block.image_url)}" alt="{html.escape(block.title)}" '
+            f'style="max-height:220px; max-width:100%; border-radius:10px; border:1px solid #06b6d4; '
+            f'box-shadow:0 0 16px rgba(6,182,212,0.25); object-fit:cover;" />'
+            f'</div>'
+        )
+    elif getattr(block, "image_url", None) == "loading":
+        img_html = (
+            f'<div style="margin-bottom:1rem; padding:0.6rem; text-align:center; background:#071526; '
+            f'border:1px dashed #38bdf8; border-radius:8px; color:#38bdf8; font-size:0.85rem;">'
+            f'🎨 Synthesizing Nano Banana visual comparison graphic in background...</div>'
+        )
+
     return (
         f'<div class="compare-container" style="overflow-x:auto;">'
+        f'{img_html}'
         f'<table style="width:100%; border-collapse:collapse; font-size:0.9rem;">'
         f'{"".join(table_rows)}'
         f'</table>'
