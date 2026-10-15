@@ -286,7 +286,7 @@ def render_flow(data: Any) -> str:
                 f'</clipPath></defs>'
             )
             svg_parts.append(
-                f'<image href="{html.escape(node.image_url)}" x="{img_x}" y="{img_y}" '
+                f'<image href="{html.escape(node.image_url)}" xlink:href="{html.escape(node.image_url)}" x="{img_x}" y="{img_y}" '
                 f'width="{img_size}" height="{img_size}" clip-path="url(#{clip_id})" '
                 f'preserveAspectRatio="xMidYMid slice" />'
             )

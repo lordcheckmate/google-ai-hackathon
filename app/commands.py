@@ -299,8 +299,16 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     # Generate dedicated illustration tabs for the requested steps (Section 6b / Multi-tab)
     steps_to_illustrate = []
     if norm and norm not in ("steps", "step", "all", "all steps", "workflow", "nodes", "those steps"):
+        # Strip common Japanese prefixes/suffixes if present
+        cleaned_norm = re.sub(r'^(?:エイジス[、,\s]*|ステップ\s*)', '', norm).strip()
+        cleaned_norm = re.sub(r'(?:のステップ|ステップ|のイラスト|イラスト|を描いて|描いて)$', '', cleaned_norm).strip()
         for idx, n in enumerate(nodes):
-            if norm in n.get("label", "").lower() or norm == n.get("id", "").lower() or f"step {idx+1}" in norm:
+            lbl = n.get("label", "").lower()
+            nid = n.get("id", "").lower()
+            if (norm in lbl or lbl in norm or
+                cleaned_norm in lbl or lbl in cleaned_norm or
+                norm == nid or cleaned_norm == nid or
+                f"step {idx+1}" in norm):
                 steps_to_illustrate.append((idx + 1, n))
                 break
 
@@ -707,12 +715,19 @@ VOICE_PATTERNS = [
     (r"(?:ミーティング終了|セッション終了|会議終了|終了)", "end_session", lambda m, sid: {}),
     (r"(?:元に戻して|アンドゥ|取り消し)", "undo", lambda m, sid: {}),
     (r"(?:キャンバスをクリア|画面をクリア|全て消して|クリア)", "clear", lambda m, sid: {}),
+    # Illustration patterns - flexible matching for Japanese
+    (r"(?:エイジス[、,\s]*)?(.+?)(?:のステップ|ステップ)?(?:の|を)?(?:イラスト|絵|図解)(?:を描いて|を作って|を生成して|描いて|見せて)?(?:(?:して)?(?:ください)?|お願い(?:します)?)?$", "illustrate_step", lambda m, sid: {"node_label": re.sub(r'^(?:エイジス[、,\s]*|ステップ\s*)', '', m.group(1)).strip()}),
+    (r"(?:イラスト|絵を描いて|ナノバナナ|図解して)\s*[:：]?\s*(.+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+
+    # Highlighting patterns
+    (r"(?:エイジス[、,\s]*)?(.+?)(?:を|のステップを)(?:ハイライト|強調)(?:(?:して)?(?:ください)?|お願い(?:します)?)?", "highlight", lambda m, sid: {"labels": [re.sub(r'^(?:エイジス[、,\s]*|ステップ\s*)', '', m.group(1)).strip()]}),
     (r"(?:ハイライト|強調して|注目して)\s*(.+)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
-    (r"(.+?)(?:を|のステップを)(?:ハイライト|強調)", "highlight", lambda m, sid: {"labels": [m.group(1).strip()]}),
+
+    # Removal patterns
+    (r"(?:エイジス[、,\s]*)?(.+?)(?:を|のステップを)(?:削除|消して|外して|落として)(?:(?:して)?(?:ください)?|お願い(?:します)?)?", "remove", lambda m, sid: {"target": re.sub(r'^(?:エイジス[、,\s]*|ステップ\s*)', '', m.group(1)).strip()}),
     (r"(?:削除|消して|外して|除外して)\s*(.+)", "remove", lambda m, sid: {"target": m.group(1).strip()}),
-    (r"(.+?)(?:を|のステップを)(?:削除|消して|外して)", "remove", lambda m, sid: {"target": m.group(1).strip()}),
-    (r"(?:イラスト|絵を描いて|ナノバナナ|図解して)\s*(.+)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
-    (r"(.+?)(?:の|を)(?:イラスト|絵を描いて|図解)", "illustrate_step", lambda m, sid: {"node_label": m.group(1).strip()}),
+
+    # Inspection
     (r"(?:詳しく教えて|説明して|詳細)\s*(.+)", "inspect", lambda m, sid: resolve_voice_inspect_args(sid, m.group(1).strip())),
 ]
 
