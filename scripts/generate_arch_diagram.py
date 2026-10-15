@@ -22,23 +22,24 @@ def draw_card(ax, x, y, w, h, title, subtitle, color, items):
         ax.text(x + 0.3, y + h - 1.2 - i*0.4, f'- {itm}', color='#e2e8f0', fontsize=8.5)
 
 # Layer 1: Client
-draw_card(ax, 0.6, 2.0, 3.4, 4.6, 'Client Layer (Browser)', 'Vanilla JS + HTML5 + Web Audio', '#38bdf8', [
+draw_card(ax, 0.6, 1.6, 3.4, 5.0, 'Client Layer (Browser)', 'Vanilla JS + HTML5 + Web Audio', '#38bdf8', [
     'AudioWorklet 16kHz PCM Stream',
     'Bidirectional WebSocket Client',
     'Interactive Dark OLED HUD',
-    'Multi-Tab Workflow History',
-    'Click & Voice Command Parity',
+    'Amber Dual-State Status (Listening+Gen)',
+    'Multi-Tab Timeline (v1, v2, v3...)',
+    'Voice & Click Parity Control',
     'Dynamic Avatar Expression Engine',
-    'Multilingual UI (en-US / ja-JP)'
+    'Bilingual UI & Voice (ja-JP / en-US)'
 ])
 
 # Layer 2: Cloud Run Backend
 draw_card(ax, 4.4, 1.6, 4.6, 5.0, 'Application Layer (Cloud Run)', 'FastAPI + Google ADK + Pure Python', '#22c55e', [
     'FastAPI WebSockets & REST APIs',
     'HTTP Basic Auth & Cookie Middleware',
-    'Adaptive Silence & 15s Debouncer',
-    'Google ADK Multi-Tool Runner',
-    'Pydantic Deterministic Validation',
+    'Adaptive Debouncer (15s turn / 2s silence)',
+    'Google ADK Multi-Tool Orchestration',
+    'Pydantic Deterministic JSON Validation',
     'Pure Python SVG/HTML Rendering',
     'In-Memory Session & Drilldown Cache',
     'Active TTS Echo Cancellation'
@@ -47,8 +48,8 @@ draw_card(ax, 4.4, 1.6, 4.6, 5.0, 'Application Layer (Cloud Run)', 'FastAPI + Go
 # Layer 3: Google Cloud Services & Vertex AI
 draw_card(ax, 9.4, 1.6, 4.0, 5.0, 'Google Cloud AI & Platform', 'Native Google Cloud Stack', '#a855f7', [
     'Cloud Speech-to-Text v2 (Streaming)',
-    'Vertex AI Gemini 2.5 Flash',
-    'Gemini 3.1 Flash Image (Nano Banana)',
+    'Vertex AI Gemini 3.5 Flash Lite',
+    'Gemini 3.1 Flash Lite Image (Nano Banana 2)',
     'Cloud Text-to-Speech (Neural2)',
     'Google Cloud Run (Scale-to-Zero)',
     'Google Cloud Storage (Assets)',

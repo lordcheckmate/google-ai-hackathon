@@ -55,16 +55,45 @@ flowchart LR
 |---|---|
 | **Cloud Run** | Single container hosting FastAPI, WebSocket endpoint, ADK agent, and static UI. Scale-to-zero (`--min-instances 0`). |
 | **Google ADK (`google-adk`)** | Agent definition, tool registration, and execution loop (`LlmAgent`). |
-| **Gemini API via Vertex AI** | Model reasoning (`REASONING_MODEL`) and typed-block JSON synthesis. |
-| **Speech-to-Text (v2, streaming)** | 16kHz PCM streaming recognition with phrase hints adaptation. |
-| **Text-to-Speech (v1)** | Agent spoken replies and contradiction warnings with echo suppression. |
+| **Gemini API via Vertex AI** | Model reasoning (`gemini-3.5-flash-lite`) and typed-block JSON synthesis. |
+| **Speech-to-Text (v2, streaming)** | 16kHz PCM streaming recognition with phrase hints adaptation (ja-JP / en-US). |
+| **Text-to-Speech (Neural2)** | Agent spoken replies and contradiction warnings with echo suppression. |
 | **Cloud Firestore** | Real-time session store, block registry, and turn-by-turn audit log (`sessions/{sid}/turns`). |
 | **Cloud Storage** | Persistent storage for step illustration icons proxying through `/img/{id}`. |
-| **Nano Banana (`IMAGE_MODEL`)** | Flat monochrome line-art icons inside process steps. |
+| **Nano Banana 2 Lite (`IMAGE_MODEL`)** | High-contrast visual schematics and step illustrations (`gemini-3.1-flash-lite-image`). |
 
 ---
 
-## 4. Repository Layout
+## 4. Live Cloud Deployment & Access
+
+- **Public Cloud Run URL**: [https://ai-meeting-assistant-7y3l4a2iba-uc.a.run.app](https://ai-meeting-assistant-7y3l4a2iba-uc.a.run.app)
+- **Authentication**:
+  - **User**: `judge`
+  - **Password**: `Aegis2026!`
+- **Cloud Project**: `project-97d34c6c-e057-425f-987`
+- **Region**: `us-central1` (Vertex AI `global`)
+
+---
+
+## 5. Live Architecture & Screenshots
+
+![Architecture Diagram](architecture_diagram.png)
+
+| 01. Standby OLED Dashboard | 02. Incremental Flow Generation (v1) |
+|---|---|
+| ![Standby](submission_screenshots/01_dashboard_standby.png) | ![Flow v1](submission_screenshots/02_flow_v1_restaurant.png) |
+
+| 03. Multi-Version Flow (v2) | 04. Nano Banana Illustration |
+|---|---|
+| ![Flow v2](submission_screenshots/03_flow_v2_restaurant.png) | ![Nano Banana](submission_screenshots/04_nano_banana_illustrated.png) |
+
+| 05. Proactive Contradiction Alert | 06. Multi-Option Comparison Table |
+|---|---|
+| ![Contradiction](submission_screenshots/05_contradiction_alert.png) | ![Compare](submission_screenshots/06_compare_table.png) |
+
+---
+
+## 6. Repository Layout
 
 ```
 .
@@ -116,11 +145,11 @@ cp .env.example .env
 
 Ensure `.env` contains:
 ```ini
-GOOGLE_CLOUD_PROJECT=your-project-id
-GOOGLE_CLOUD_LOCATION=us-central1
+GOOGLE_CLOUD_PROJECT=project-97d34c6c-e057-425f-987
+GOOGLE_CLOUD_LOCATION=global
 GOOGLE_GENAI_USE_VERTEXAI=TRUE
-REASONING_MODEL=gemini-2.5-flash
-IMAGE_MODEL=gemini-3.1-flash-image
+REASONING_MODEL=gemini-3.5-flash-lite
+IMAGE_MODEL=gemini-3.1-flash-lite-image
 ```
 
 ### 2. Run Local Server

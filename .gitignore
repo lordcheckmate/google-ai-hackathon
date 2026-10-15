@@ -19,6 +19,8 @@ venv/
 *.log
 data/
 *.png
+!architecture_diagram.png
+!submission_screenshots/*.png
 
 # Legacy local backup
 backend/
