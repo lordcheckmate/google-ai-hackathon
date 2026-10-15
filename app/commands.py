@@ -278,42 +278,64 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     if not nodes:
         return {"status": "error", "message": "Flow diagram contains no steps"}
 
-    # If a specific node is requested, illustrate that node; otherwise illustrate all nodes!
-    if norm and norm not in ("steps", "step", "all", "all steps", "workflow", "nodes"):
-        target_node = None
-        for n in nodes:
-            if norm in n.get("label", "").lower() or norm == n.get("id", "").lower():
-                target_node = n
+    # Generate dedicated illustration tabs for the requested steps (Section 6b / Multi-tab)
+    steps_to_illustrate = []
+    if norm and norm not in ("steps", "step", "all", "all steps", "workflow", "nodes", "those steps"):
+        for idx, n in enumerate(nodes):
+            if norm in n.get("label", "").lower() or norm == n.get("id", "").lower() or f"step {idx+1}" in norm:
+                steps_to_illustrate.append((idx + 1, n))
                 break
-        if target_node:
-            img_url = generate_step_image(target_node["label"], f"Line icon for {target_node['label']}", is_icon=True)
-            target_node["image_url"] = img_url
-            illustrated_label = target_node["label"]
-        else:
-            for n in nodes:
-                n["image_url"] = generate_step_image(n["label"], f"Line icon for {n['label']}", is_icon=True)
-            illustrated_label = "all steps"
+        if not steps_to_illustrate and nodes:
+            steps_to_illustrate.append((1, nodes[0]))
     else:
-        for n in nodes:
-            n["image_url"] = generate_step_image(n["label"], f"Line icon for {n['label']}", is_icon=True)
-        illustrated_label = "all steps"
+        # All steps get their own dedicated tab at the top!
+        for idx, n in enumerate(nodes):
+            steps_to_illustrate.append((idx + 1, n))
 
-    markup = render_block("flow", block_json)
-    save_block(sid, block_id, "flow", block_json, parent=target_block.get("parent"))
+    last_tab_id = None
+    for step_num, node in steps_to_illustrate:
+        node_id = node.get("id", f"n{step_num}")
+        lbl = node.get("label", f"Step {step_num}")
+        note = node.get("note", "")
+        tab_id = f"tab_step_{step_num}_{node_id}"
+        img_url = generate_step_image(lbl, f"Step illustration for {lbl}: {note}", is_icon=False)
 
-    await _safe_send_ws(ws_sender, {
-        "type": "block_upsert",
-        "block": {
-            "id": block_id,
-            "kind": "flow",
-            "title": block_json.get("title", "Process Workflow"),
-            "html": markup,
-            "parent": target_block.get("parent"),
-            "json": block_json,
+        tab_json = {
+            "kind": "answer",
+            "title": f"🖼️ Step {step_num}: {lbl[:20]}",
+            "question": f"Step {step_num}: {lbl}",
+            "answer": note or f"Detailed execution schematic for '{lbl}'.",
+            "detail": f"Step {step_num} of {len(nodes)} in {block_json.get('title', 'Workflow')}.",
+            "image_url": img_url,
+            "visual_caption": f"Nano Banana visual diagram for {lbl}.",
+            "sources": [{"title": "Nano Banana Visual Pipeline", "url": img_url}],
+            "confidence": "high",
         }
-    })
+        save_block(sid, tab_id, "answer", tab_json, parent={"block_id": target_block["id"], "ref": node_id})
+        markup = render_block("answer", tab_json)
 
-    return {"status": "ok", "block_id": block_id, "node": illustrated_label}
+        await _safe_send_ws(ws_sender, {
+            "type": "block_upsert",
+            "block": {
+                "id": tab_id,
+                "kind": "answer",
+                "title": f"🖼️ Step {step_num}: {lbl[:20]}",
+                "html": markup,
+                "json": tab_json,
+                "parent": {"block_id": target_block["id"], "ref": node_id},
+            }
+        })
+        last_tab_id = tab_id
+
+    spoken_text = f"Generated visual illustration in a separate tab at the top."
+    try:
+        from app.tts import synthesize_speech
+        audio_b64 = synthesize_speech(spoken_text)
+        await _safe_send_ws(ws_sender, {"type": "speak", "text": spoken_text, "audio": audio_b64})
+    except Exception:
+        pass
+
+    return {"status": "ok", "tabs_created": len(steps_to_illustrate), "last_tab": last_tab_id}
 
 
 async def handle_highlight(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:

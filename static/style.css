@@ -550,24 +550,48 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  max-width: 60%;
+  overflow-x: auto;
+  white-space: nowrap;
+  padding: 0.2rem 0;
+  scrollbar-width: thin;
+}
+
+.visual-tabs::-webkit-scrollbar {
+  height: 4px;
+}
+
+.visual-tabs::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
 }
 
 .visual-tab-pill {
   font-family: var(--font-mono);
   font-size: 0.72rem;
-  padding: 0.2rem 0.55rem;
+  padding: 0.25rem 0.65rem;
   border-radius: 6px;
   background: #090e18;
   border: 1px solid #1e293b;
-  color: #64748b;
+  color: #94a3b8;
   cursor: pointer;
-  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
 }
 
-.visual-tab-pill:hover, .visual-tab-pill.active {
-  background: rgba(6, 182, 212, 0.2);
+.visual-tab-pill:hover {
+  background: rgba(6, 182, 212, 0.15);
+  border-color: rgba(6, 182, 212, 0.5);
+  color: #f8fafc;
+}
+
+.visual-tab-pill.active {
+  background: rgba(6, 182, 212, 0.25);
   border-color: var(--neon-cyan);
-  color: #fff;
+  box-shadow: 0 0 10px rgba(6, 182, 212, 0.4);
+  color: #ffffff;
+  font-weight: 700;
 }
 
 /* Neon Square Inner Viewport */

@@ -293,7 +293,12 @@ function renderTabs() {
   blocksStore.forEach((block, id) => {
     const tab = document.createElement('button');
     tab.className = `visual-tab-pill ${id === activeBlockId ? 'active' : ''}`;
-    tab.textContent = block.title || block.kind;
+    let label = block.title || block.kind;
+    if (block.kind === 'flow' && !label.includes('Workflow') && !label.includes('📋')) {
+      label = `📋 ${label}`;
+    }
+    tab.textContent = label;
+    tab.title = block.title || block.kind;
     tab.onclick = () => {
       activeBlockId = id;
       renderNeonSquare();
@@ -311,6 +316,15 @@ neonCanvasContent.addEventListener('click', (event) => {
   if (!refElem || !activeBlockId) return;
 
   const ref = refElem.getAttribute('data-ref');
+
+  // If a tab for this specific step already exists, switch to it immediately!
+  const matchingTabId = Array.from(blocksStore.keys()).find(k => k.includes(`_${ref}`) || k.includes(`_${ref}_`));
+  if (matchingTabId && matchingTabId !== activeBlockId) {
+    activeBlockId = matchingTabId;
+    renderNeonSquare();
+    return;
+  }
+
   refElem.classList.add('pending');
 
   if (ref.startsWith('item:')) {

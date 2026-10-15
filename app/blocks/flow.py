@@ -196,29 +196,11 @@ def render_flow(data: Any) -> str:
                 f'fill="{fill_color}" stroke="{stroke_color}" stroke-width="{stroke_width}" />'
             )
 
-        # Nano Banana image or icon
-        has_img = bool(node.image_url)
-        if has_img:
-            img_size = 48
-            img_x = nx + 14
-            img_y = ny + (nh - img_size) / 2
-            svg_parts.append(
-                f'<rect x="{img_x - 2}" y="{img_y - 2}" width="{img_size + 4}" height="{img_size + 4}" rx="10" '
-                f'fill="#050811" stroke="#1e293b" stroke-width="1" />'
-            )
-            svg_parts.append(
-                f'<image href="{html.escape(node.image_url)}" x="{img_x}" y="{img_y}" '
-                f'width="{img_size}" height="{img_size}" />'
-            )
-            text_x = nx + 74
-            text_anchor = "start"
-            max_title_w = 23
-            max_note_w = 30
-        else:
-            text_x = nx + nw / 2
-            text_anchor = "middle"
-            max_title_w = 26
-            max_note_w = 34
+        # Clean centered layout for process diagram cards (illustrations live in dedicated tabs!)
+        text_x = nx + nw / 2
+        text_anchor = "middle"
+        max_title_w = 26
+        max_note_w = 34
 
         # Wrap Title without clipping
         title_lines = wrap_text(node.label, width=max_title_w)
