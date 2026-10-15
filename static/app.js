@@ -288,13 +288,13 @@ function renderNeonSquare() {
 
 function renderTabs() {
   visualTabs.innerHTML = '';
-  if (blocksStore.size <= 1) return;
+  if (blocksStore.size === 0) return;
 
   blocksStore.forEach((block, id) => {
     const tab = document.createElement('button');
     tab.className = `visual-tab-pill ${id === activeBlockId ? 'active' : ''}`;
     let label = block.title || block.kind;
-    if (block.kind === 'flow' && !label.includes('Workflow') && !label.includes('📋')) {
+    if (block.kind === 'flow' && !label.startsWith('📋')) {
       label = `📋 ${label}`;
     }
     tab.textContent = label;

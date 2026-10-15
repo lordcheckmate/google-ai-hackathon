@@ -61,9 +61,10 @@ def _emit_ws(payload: Dict[str, Any]):
 
 def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
     """
-    block_id: reuse an existing id to UPDATE that block, or a new id to add one.
-    instruction: one plain-language delta, e.g. 'add inspection after processing'
-    or 'add Vendor C with the pricing they just gave'. NOT a full restatement.
+    Generate or update a block.
+    Every generation creates a new dedicated tab version (v1, v2, v3...)
+    so the user can review past workflow history.
+    instruction: one plain-language delta. Pulls old diagram and adds to it.
     """
     sid = _current_sid.get()
     transcript = _current_transcript.get()
@@ -71,19 +72,35 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
 
     logger.info(f"[Tool: upsert_block] sid={sid}, block_id={block_id}, kind={kind}, instruction='{instruction}'")
 
+    # Inherit from latest existing block of this kind if updating
+    existing_blocks_same_kind = [b for b in get_blocks(sid) if b.get("kind") == kind]
     existing_record = get_block(sid, block_id)
+    if not existing_record and existing_blocks_same_kind:
+        existing_record = existing_blocks_same_kind[-1]
+
     existing_json = existing_record.get("json") if existing_record else None
     parent = existing_record.get("parent") if existing_record else None
 
     # Step 1: Generate typed JSON via Gemini + Pydantic schema using full conversation context
+    # (Pulls old diagram and adds to it as requested)
     history = get_transcript_history(sid)
     block_json = generate_block_json(kind, instruction, existing_json, conversation_history=history)
+
+    # Every generation gets a new dedicated tab version (v1, v2, v3...)
+    total_versions = len(existing_blocks_same_kind) + 1
+    base_id = re.sub(r"_v\d+$", "", block_id)
+    actual_block_id = f"{base_id}_v{total_versions}"
+
+    raw_title = block_json.get("title") or block_json.get("question") or kind.capitalize()
+    raw_title_clean = re.sub(r"\s*\(v\d+\)$", "", raw_title)
+    versioned_title = f"{raw_title_clean} (v{total_versions})"
+    block_json["title"] = versioned_title
 
     # Step 2: Render pure Python deterministic markup (HTML or SVG)
     markup = render_block(kind, block_json)
 
     # Step 3: Persist block record
-    record = save_block(sid, block_id, kind, block_json, parent=parent)
+    record = save_block(sid, actual_block_id, kind, block_json, parent=parent)
 
     # Step 4: Log turn audit trail (Section 9)
     latency_ms = (time.time() - t0) * 1000.0
@@ -91,7 +108,7 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
         sid=sid,
         transcript=transcript,
         tool="upsert_block",
-        block_id=block_id,
+        block_id=actual_block_id,
         kind=kind,
         instruction=instruction,
         json_after=block_json,
@@ -99,13 +116,12 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
     )
 
     # Step 5: Push update to the live canvas over WebSocket
-    title = block_json.get("title") or block_json.get("question") or kind.capitalize()
     _emit_ws({
         "type": "block_upsert",
         "block": {
-            "id": block_id,
+            "id": actual_block_id,
             "kind": kind,
-            "title": title,
+            "title": versioned_title,
             "html": markup,
             "parent": parent,
             "json": block_json,
@@ -114,9 +130,9 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
 
     return {
         "status": "ok",
-        "block_id": block_id,
+        "block_id": actual_block_id,
         "kind": kind,
-        "title": title,
+        "title": versioned_title,
     }
 
 
@@ -206,63 +222,71 @@ def highlight(block_id: str, labels: list[str]) -> dict:
 
 def illustrate_step(block_id: str, node_label: str, visual_description: str) -> dict:
     """
-    Nano Banana, flow blocks only. Only when asked for pictures.
+    Nano Banana step illustration. Generates a dedicated illustration tab at the top.
+    Uses Gemini 2.5 Flash Image (Nano Banana) for high-contrast visuals and captions.
     """
+    from app.images import generate_nano_banana_image
+    import uuid
+
     sid = _current_sid.get()
     transcript = _current_transcript.get()
     t0 = time.time()
 
     logger.info(f"[Tool: illustrate_step] sid={sid}, block_id={block_id}, node={node_label}")
     record = get_block(sid, block_id)
-    if not record or record.get("kind") != "flow":
-        return {"status": "error", "message": f"Flow block {block_id} not found"}
+    if not record:
+        flows = [b for b in get_blocks(sid) if b.get("kind") == "flow"]
+        if flows:
+            record = flows[-1]
+            block_id = record["id"]
 
-    img_url = generate_step_image(node_label, visual_description, is_icon=True)
-    block_json = record["json"]
+    clean_label = node_label.strip()
+    img_url, gen_desc = generate_nano_banana_image(
+        clean_label,
+        visual_description or f"Process illustration for {clean_label}"
+    )
 
-    matched = False
-    norm_target = node_label.strip().lower()
-    for node in block_json.get("nodes", []):
-        lbl = str(node.get("label", "")).strip().lower()
-        nid = str(node.get("id", "")).strip().lower()
-        if norm_target in lbl or lbl in norm_target or norm_target == nid or any(w in lbl for w in norm_target.split() if len(w) > 3):
-            node["image_url"] = img_url
-            matched = True
-            break
+    tab_id = f"tab_step_{uuid.uuid4().hex[:6]}"
+    tab_json = {
+        "kind": "answer",
+        "title": f"🖼️ {clean_label[:20].capitalize()}",
+        "question": f"Illustration: {clean_label}",
+        "answer": gen_desc or visual_description or f"Detailed execution schematic for '{clean_label}'.",
+        "detail": f"Generated via Gemini 2.5 Flash Image (Nano Banana).",
+        "image_url": img_url,
+        "visual_caption": gen_desc or f"Nano Banana visual diagram for {clean_label}.",
+        "sources": [{"title": "Gemini 2.5 Flash Image (Nano Banana)", "url": img_url}],
+        "confidence": "high",
+    }
 
-    if not matched and block_json.get("nodes"):
-        block_json["nodes"][0]["image_url"] = img_url
-        matched = True
+    parent = {"block_id": block_id, "ref": clean_label} if record else None
+    save_block(sid, tab_id, "answer", tab_json, parent=parent)
+    markup = render_block("answer", tab_json)
 
-    if matched:
-        markup = render_block("flow", block_json)
-        save_block(sid, block_id, "flow", block_json, parent=record.get("parent"))
+    log_turn(
+        sid=sid,
+        transcript=transcript,
+        tool="illustrate_step",
+        block_id=tab_id,
+        kind="answer",
+        instruction=f"illustrate: {node_label}",
+        json_after=tab_json,
+        latency_ms=(time.time() - t0) * 1000.0,
+    )
 
-        log_turn(
-            sid=sid,
-            transcript=transcript,
-            tool="illustrate_step",
-            block_id=block_id,
-            kind="flow",
-            instruction=f"illustrate: {node_label}",
-            json_after=block_json,
-            latency_ms=(time.time() - t0) * 1000.0,
-        )
+    _emit_ws({
+        "type": "block_upsert",
+        "block": {
+            "id": tab_id,
+            "kind": "answer",
+            "title": f"🖼️ {clean_label[:20].capitalize()}",
+            "html": markup,
+            "parent": parent,
+            "json": tab_json,
+        }
+    })
 
-        _emit_ws({
-            "type": "block_upsert",
-            "block": {
-                "id": block_id,
-                "kind": "flow",
-                "title": block_json.get("title", "Process Workflow"),
-                "html": markup,
-                "parent": record.get("parent"),
-                "json": block_json,
-            }
-        })
-        return {"status": "ok", "node": node_label, "image_url": img_url}
-
-    return {"status": "error", "message": f"Node '{node_label}' not found in flow {block_id}"}
+    return {"status": "ok", "tab_id": tab_id, "image_url": img_url, "description": gen_desc}
 
 
 def flag_contradiction(earlier: str, now: str) -> dict:
@@ -402,7 +426,7 @@ You decide the representation autonomously without waiting for manual button cli
 - A question with a findable answer -> IMMEDIATELY call upsert_block with kind='answer'.
 - Things someone agreed to do, or must be true -> IMMEDIATELY call upsert_block with kind='checklist'.
 Pick the one that makes the point visible fastest.
-- When asked for pictures, illustrations, or to show a workflow visually, autonomously call illustrate_step for the steps so Nano Banana line icons appear directly inside the flow boxes. No button clicking required.
+- When asked for pictures, illustrations, or to show a workflow visually, autonomously call illustrate_step for the steps so Nano Banana visual tabs appear at the top. No button clicking required.
 
 EXPLAINING & SPEAKING ALOUD (ALWAYS DRAW PICTURE/DIAGRAM + CAPTION BELOW)
 When asked to explain something, answer a question, or clarify:
@@ -416,11 +440,8 @@ When asked to highlight, pass EVERY item named to the highlight tool. If they na
 CONTRADICTIONS & SPEAKING OVER
 If something said now cannot both be true with something said earlier in the meeting (conflicting dates, requirements, owners, tech choices), IMMEDIATELY call flag_contradiction once. This interrupts and speaks over the meeting with one short question asking which is right. Do not raise the same contradiction twice. Only real conflicts.
 
-UPDATE, DO NOT DUPLICATE
-You can see every block already on the canvas. If the conversation returns to something
-already there, call upsert_block with THAT block_id. Create a new block only for a
-genuinely new subject. A meeting that revisits a topic four times must end with one
-block, not four.
+UPDATE WITH NEW GENERATION TAB:
+Every new generation or diagram update is saved as a new generation version (Workflow v1, Workflow v2...) so users can review the workflow history across tabs. When updating, pass the short delta to upsert_block and it will pull the previous diagram, update it, and create the new version tab.
 
 HOW TO CHANGE A BLOCK
 Pass ONE short delta describing only what changed. Never restate the whole thing.
