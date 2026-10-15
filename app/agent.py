@@ -396,7 +396,7 @@ than not. Only act when something has been described, asked, compared, agreed, o
 
 AUTONOMOUS VISUALS & NANO BANANA (ALWAYS RUN SHAPE BUILDING OR NANO BANANA OR BOTH)
 You decide the representation autonomously without waiting for manual button clicks:
-- When a sequence of steps, workflow, pipeline, or stages is described (e.g., 'first X, then Y, then Z') -> IMMEDIATELY call upsert_block with kind='flow'.
+- When a sequence of steps, workflow, pipeline, or stages is described (e.g., 'first X, then Y, then Z') -> IMMEDIATELY call upsert_block ONCE with kind='flow' and block_id='process_flow' containing all the steps in the sequence. Never create separate flow blocks for individual steps!
 - When calculations, numbers, metrics, or quantities are discussed (e.g. '10 + 10 units') -> IMMEDIATELY call upsert_block with kind='answer' or kind='flow' showing the visual calculation breakdown.
 - Named options being weighed against each other -> IMMEDIATELY call upsert_block with kind='compare'.
 - A question with a findable answer -> IMMEDIATELY call upsert_block with kind='answer'.

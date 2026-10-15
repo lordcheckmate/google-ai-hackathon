@@ -65,8 +65,31 @@ def build_semantic_step_icon(label: str) -> str:
     """
     lbl = label.lower().strip()
 
-    # 1. Notes / Documentation / Writing
-    if any(k in lbl for k in ["note", "doc", "write", "record", "log", "summary", "memo"]):
+    # 1. Capture / Photo / Camera / Scan / Image
+    if any(k in lbl for k in ["capture", "photo", "camera", "snap", "scan", "raw image", "lens"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <rect x="6" y="13" width="36" height="26" rx="6" fill="#091224" stroke="#06b6d4" stroke-width="2"/>
+  <circle cx="24" cy="26" r="9" fill="#0f1f38" stroke="#38bdf8" stroke-width="2"/>
+  <circle cx="24" cy="26" r="4" fill="#06b6d4"/>
+  <rect x="18" y="8" width="12" height="5" rx="2" fill="#06b6d4"/>
+  <circle cx="35" cy="19" r="2" fill="#22d3ee"/>
+</svg>'''
+
+    # 2. Convert / OCR / Text Extract / Parse / Transform
+    elif any(k in lbl for k in ["convert", "extract", "ocr", "image to text", "parse", "transform", "transcribe"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <rect x="5" y="10" width="16" height="22" rx="3" fill="#0b172a" stroke="#06b6d4" stroke-width="1.8"/>
+  <circle cx="13" cy="17" r="2.5" fill="#38bdf8"/>
+  <path d="M 8 26 L 12 21 L 18 28" stroke="#38bdf8" stroke-width="1.5" fill="none"/>
+  <path d="M 23 24 L 27 24 M 25 21 L 28 24 L 25 27" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+  <rect x="27" y="14" width="16" height="24" rx="3" fill="#06281e" stroke="#10b981" stroke-width="1.8"/>
+  <line x1="31" y1="21" x2="39" y2="21" stroke="#34d399" stroke-width="2" stroke-linecap="round"/>
+  <line x1="31" y1="26" x2="37" y2="26" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+  <line x1="31" y1="31" x2="38" y2="31" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round"/>
+</svg>'''
+
+    # 3. Notes / Documentation / Writing
+    elif any(k in lbl for k in ["note", "doc", "write", "record", "log", "summary", "memo"]):
         return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
   <rect x="10" y="6" width="28" height="36" rx="4" fill="#0b172a" stroke="#06b6d4" stroke-width="2"/>
   <line x1="16" y1="14" x2="26" y2="14" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
@@ -77,33 +100,23 @@ def build_semantic_step_icon(label: str) -> str:
   <path d="M 33 34 L 35 32" stroke="#000" stroke-width="1.5"/>
 </svg>'''
 
-    # 2. Client / User / Show / Customer / Present
-    elif any(k in lbl for k in ["client", "user", "customer", "show", "present", "stakeholder", "demo"]):
+    # 4. Client / Share / User / Customer / Present / Handover
+    elif any(k in lbl for k in ["client", "user", "customer", "show", "present", "stakeholder", "demo", "share", "handover"]):
         return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
   <rect x="6" y="8" width="36" height="26" rx="4" fill="#0f172a" stroke="#10b981" stroke-width="2"/>
   <circle cx="24" cy="18" r="5" fill="#34d399"/>
   <path d="M 16 29 C 16 24, 32 24, 32 29" stroke="#34d399" stroke-width="2" fill="none"/>
   <line x1="24" y1="34" x2="24" y2="40" stroke="#10b981" stroke-width="2"/>
   <line x1="16" y1="40" x2="32" y2="40" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="37" cy="11" r="3" fill="#22d3ee"/>
 </svg>'''
 
-    # 3. Decision / Strategy / Choice / Fork
-    elif any(k in lbl for k in ["decide", "decision", "choose", "choice", "fork", "evaluate"]):
-        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
-  <polygon points="24,6 40,24 24,42 8,24" fill="#1e1b4b" stroke="#a855f7" stroke-width="2"/>
-  <circle cx="24" cy="24" r="4" fill="#c084fc"/>
-  <path d="M 24 14 L 24 20" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
-  <path d="M 24 28 L 24 34" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
-  <path d="M 14 24 L 20 24" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
-  <path d="M 28 24 L 34 24" stroke="#c084fc" stroke-width="2" stroke-linecap="round"/>
-</svg>'''
-
-    # 4. Inspection / QA / Verify / Audit / Review
-    elif any(k in lbl for k in ["inspect", "qa", "verify", "check", "audit", "review", "test"]):
+    # 5. Inspection / QA / Verify / Audit / Review
+    elif any(k in lbl for k in ["inspect", "qa", "verify", "check", "audit", "review", "test", "internal review"]):
         return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
   <circle cx="20" cy="20" r="11" fill="#082f49" stroke="#38bdf8" stroke-width="2.5"/>
-  <line x1="28" y1="28" x2="40" y2="40" stroke="#38bdf8" stroke-width="3" stroke-linecap="round"/>
-  <path d="M 15 20 L 19 24 L 26 16" fill="none" stroke="#34d399" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="28" y1="28" x2="40" y2="40" stroke="#38bdf8" stroke-width="3.5" stroke-linecap="round"/>
+  <path d="M 14 20 L 18 24 L 26 16" fill="none" stroke="#34d399" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>'''
 
     # 5. Delivery / Shipping / Deploy / Release / Ship
