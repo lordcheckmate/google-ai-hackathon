@@ -550,7 +550,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  max-width: 60%;
+  max-width: 75%;
   overflow-x: auto;
   white-space: nowrap;
   padding: 0.2rem 0;

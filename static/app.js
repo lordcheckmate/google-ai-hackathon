@@ -297,8 +297,12 @@ function renderTabs() {
     if (block.kind === 'flow' && !label.startsWith('📋')) {
       label = `📋 ${label}`;
     }
-    tab.textContent = label;
-    tab.title = block.title || block.kind;
+    let displayText = label;
+    if (displayText.length > 22) {
+      displayText = displayText.slice(0, 20) + '...';
+    }
+    tab.textContent = displayText;
+    tab.title = label;
     tab.onclick = () => {
       activeBlockId = id;
       renderNeonSquare();
