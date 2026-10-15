@@ -16,6 +16,28 @@ from app.blocks.schema import FlowBlock, CompareBlock, AnswerBlock, ChecklistBlo
 logger = logging.getLogger("generate")
 
 
+_CACHED_GENAI_CLIENT = None
+
+
+def get_genai_client():
+    global _CACHED_GENAI_CLIENT
+    if _CACHED_GENAI_CLIENT is None:
+        try:
+            from google import genai
+            use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
+            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+            location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+            api_key = os.getenv("GEMINI_API_KEY")
+
+            if use_vertex and project:
+                _CACHED_GENAI_CLIENT = genai.Client(vertexai=True, project=project, location=location)
+            elif api_key:
+                _CACHED_GENAI_CLIENT = genai.Client(api_key=api_key)
+        except Exception as err:
+            logger.warning(f"Failed to initialize GenAI client: {err}")
+    return _CACHED_GENAI_CLIENT
+
+
 def generate_block_json(
     kind: str,
     instruction: str,
@@ -33,23 +55,11 @@ def generate_block_json(
     schema_cls, _ = BLOCK_REGISTRY[kind]
     context_text = "\n".join([f"- {h}" for h in conversation_history[-10:]]) if conversation_history else ""
 
-    # Attempt to call Gemini via google-genai
+    # Attempt to call Gemini via warm pooled client
     try:
-        from google import genai
         from google.genai import types
 
-        # Determine Client configuration
-        client = None
-        use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
-        project = os.getenv("GOOGLE_CLOUD_PROJECT")
-        location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-        api_key = os.getenv("GEMINI_API_KEY")
-
-        if use_vertex and project:
-            client = genai.Client(vertexai=True, project=project, location=location)
-        elif api_key:
-            client = genai.Client(api_key=api_key)
-
+        client = get_genai_client()
         if client:
             system_prompt = (
                 f"You maintain a structured meeting canvas block of kind '{kind}'.\n"

@@ -39,6 +39,20 @@ if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+@app.on_event("startup")
+async def on_startup():
+    # Pre-warm pooled GenAI client in background so turns are immediate
+    async def _prewarm():
+        try:
+            from app.blocks.generate import get_genai_client
+            client = get_genai_client()
+            if client:
+                logger.info("Pooled GenAI client pre-warmed successfully")
+        except Exception as e:
+            logger.warning(f"Client pre-warm notice: {e}")
+    asyncio.create_task(_prewarm())
+
+
 @app.get("/")
 async def root():
     index_file = STATIC_DIR / "index.html"
