@@ -976,13 +976,13 @@ async function startRecording() {
             return;
           }
 
-          // Condition 2: Wait for speech stop (2.0s of silence after speech stops)
+          // Condition 2: Wait for speech stop (1.0s of silence after speech stops)
           if (speechDebounceTimer) {
             clearTimeout(speechDebounceTimer);
           }
           speechDebounceTimer = setTimeout(() => {
-            flushSpeechTurn('speech stop detected (2s silence)');
-          }, 2000);
+            flushSpeechTurn('speech stop detected (1s silence)');
+          }, 1000);
         }
       };
 
@@ -993,10 +993,10 @@ async function startRecording() {
           if (speechDebounceTimer) {
             clearTimeout(speechDebounceTimer);
           }
-          // Allow 2.0s silence to confirm speech stop
+          // Allow 1.0s silence to confirm speech stop
           speechDebounceTimer = setTimeout(() => {
-            flushSpeechTurn('onspeechend (speech stopped for 2s)');
-          }, 2000);
+            flushSpeechTurn('onspeechend (speech stopped for 1s)');
+          }, 1000);
         }
       };
 
@@ -1112,14 +1112,14 @@ manualTextInput.addEventListener('input', () => {
     return;
   }
 
-  // Condition 2: Chat input stops typing for 2 seconds
+  // Condition 2: Chat input stops typing for 1 second
   if (chatDebounceTimer) {
     clearTimeout(chatDebounceTimer);
   }
   chatDebounceTimer = setTimeout(() => {
-    console.log('[Chat] Chat typing stopped for 2 seconds -> sending to Gemini');
+    console.log('[Chat] Chat typing stopped for 1 second -> sending to Gemini');
     sendManualTurn();
-  }, 2000);
+  }, 1000);
 });
 
 sendManualBtn.addEventListener('click', sendManualTurn);

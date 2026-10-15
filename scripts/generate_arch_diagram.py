@@ -37,7 +37,7 @@ draw_card(ax, 0.6, 1.6, 3.4, 5.0, 'Client Layer (Browser)', 'Vanilla JS + HTML5 
 draw_card(ax, 4.4, 1.6, 4.6, 5.0, 'Application Layer (Cloud Run)', 'FastAPI + Google ADK + Pure Python', '#22c55e', [
     'FastAPI WebSockets & REST APIs',
     'HTTP Basic Auth & Cookie Middleware',
-    'Adaptive Debouncer (15s turn / 2s silence)',
+    'Adaptive Debouncer (15s turn / 1s silence)',
     'Google ADK Multi-Tool Orchestration',
     'Pydantic Deterministic JSON Validation',
     'Pure Python SVG/HTML Rendering',

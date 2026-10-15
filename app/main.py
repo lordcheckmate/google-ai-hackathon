@@ -396,7 +396,7 @@ async def websocket_endpoint(websocket: WebSocket):
             flush_turn()
             return
 
-        # Condition 2: Wait for speech to stop (2.0s of silence after speech stops)
+        # Condition 2: Wait for speech to stop (1.0s of silence after speech stops)
         if debounce_handle[0]:
             try:
                 debounce_handle[0].cancel()
@@ -404,10 +404,10 @@ async def websocket_endpoint(websocket: WebSocket):
                 pass
 
         def on_speech_stopped():
-            logger.info("[Speech Stop Detected (2s)] Flushing turn to agent")
+            logger.info("[Speech Stop Detected (1s)] Flushing turn to agent")
             flush_turn()
 
-        debounce_handle[0] = loop.call_later(2.0, on_speech_stopped)
+        debounce_handle[0] = loop.call_later(1.0, on_speech_stopped)
 
 
 
