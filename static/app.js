@@ -22,9 +22,14 @@ let activeBlockId = null;
 // DOM Elements
 const charWrapper = document.getElementById('character-wrapper');
 const eyesListening = document.getElementById('char-eyes-listening');
+const eyesGenerating = document.getElementById('char-eyes-generating');
 const eyesThinking = document.getElementById('char-eyes-thinking');
 const eyesSpeaking = document.getElementById('char-eyes-speaking');
 const eyesAlert = document.getElementById('char-eyes-alert');
+const charHeadBorder = document.getElementById('char-head-border');
+const charEarL = document.getElementById('char-ear-l');
+const charEarR = document.getElementById('char-ear-r');
+const charForeheadGem = document.getElementById('char-forehead-gem');
 const mouthBar = document.getElementById('char-mouth-bar');
 const speechBubble = document.getElementById('char-speech-bubble');
 const wsDot = document.getElementById('ws-dot');
@@ -301,36 +306,91 @@ function closeSidebarDrawer() {
 // =========================================================================
 
 function setAvatarState(state) {
-  // state: 'listening' | 'thinking' | 'speaking' | 'alert'
-  eyesListening.classList.add('hidden');
-  eyesThinking.classList.add('hidden');
-  eyesSpeaking.classList.add('hidden');
-  eyesAlert.classList.add('hidden');
+  // state: 'listening' | 'generating' | 'thinking' | 'speaking' | 'alert'
+  if (eyesListening) eyesListening.classList.add('hidden');
+  if (eyesGenerating) eyesGenerating.classList.add('hidden');
+  if (eyesThinking) eyesThinking.classList.add('hidden');
+  if (eyesSpeaking) eyesSpeaking.classList.add('hidden');
+  if (eyesAlert) eyesAlert.classList.add('hidden');
 
-  charWrapper.classList.remove('thinking', 'speaking', 'alert');
-  neonSquareFrame.classList.remove('thinking', 'speaking', 'alert');
+  charWrapper.classList.remove('thinking', 'generating', 'speaking', 'alert');
+  neonSquareFrame.classList.remove('thinking', 'generating', 'speaking', 'alert');
   mouthBar.classList.remove('speaking-mouth');
-  speechBubble.classList.remove('thinking', 'speaking', 'alert');
+  speechBubble.classList.remove('thinking', 'generating', 'speaking', 'alert');
 
-  if (state === 'thinking') {
-    eyesThinking.classList.remove('hidden');
-    charWrapper.classList.add('thinking');
-    neonSquareFrame.classList.add('thinking');
-    speechBubble.classList.add('thinking');
+  if (state === 'generating' || state === 'thinking') {
+    if (eyesGenerating) eyesGenerating.classList.remove('hidden');
+    else if (eyesThinking) eyesThinking.classList.remove('hidden');
+
+    charWrapper.classList.add('generating');
+    neonSquareFrame.classList.add('generating');
+    speechBubble.classList.add('generating');
+
+    if (charHeadBorder) charHeadBorder.setAttribute('stroke', '#f97316');
+    if (charEarL) charEarL.setAttribute('fill', '#f97316');
+    if (charEarR) charEarR.setAttribute('fill', '#f97316');
+    if (charForeheadGem) {
+      charForeheadGem.style.background = '#f97316';
+      charForeheadGem.style.boxShadow = '0 0 12px #f97316';
+    }
+    if (wsDot) wsDot.className = 'status-dot generating';
+    if (wsStatus) {
+      wsStatus.textContent = currentLanguage === 'ja-JP' ? '⚡ 生成中 & 傾聴中...' : '⚡ Generating & Listening...';
+      wsStatus.style.color = '#fb923c';
+    }
   } else if (state === 'speaking') {
-    eyesSpeaking.classList.remove('hidden');
+    if (eyesSpeaking) eyesSpeaking.classList.remove('hidden');
     charWrapper.classList.add('speaking');
     neonSquareFrame.classList.add('speaking');
     mouthBar.classList.add('speaking-mouth');
     speechBubble.classList.add('speaking');
+
+    if (charHeadBorder) charHeadBorder.setAttribute('stroke', '#10b981');
+    if (charEarL) charEarL.setAttribute('fill', '#10b981');
+    if (charEarR) charEarR.setAttribute('fill', '#10b981');
+    if (charForeheadGem) {
+      charForeheadGem.style.background = '#34d399';
+      charForeheadGem.style.boxShadow = '0 0 10px #34d399';
+    }
+    if (wsDot) wsDot.className = 'status-dot active';
+    if (wsStatus) {
+      wsStatus.textContent = currentLanguage === 'ja-JP' ? '発話中' : 'Speaking';
+      wsStatus.style.color = '#34d399';
+    }
   } else if (state === 'alert') {
-    eyesAlert.classList.remove('hidden');
+    if (eyesAlert) eyesAlert.classList.remove('hidden');
     charWrapper.classList.add('alert');
     neonSquareFrame.classList.add('alert');
     speechBubble.classList.add('alert');
+
+    if (charHeadBorder) charHeadBorder.setAttribute('stroke', '#ef4444');
+    if (charEarL) charEarL.setAttribute('fill', '#ef4444');
+    if (charEarR) charEarR.setAttribute('fill', '#ef4444');
+    if (charForeheadGem) {
+      charForeheadGem.style.background = '#ef4444';
+      charForeheadGem.style.boxShadow = '0 0 12px #ef4444';
+    }
+    if (wsDot) wsDot.className = 'status-dot';
+    if (wsStatus) {
+      wsStatus.textContent = currentLanguage === 'ja-JP' ? '⚠️ 矛盾検知' : '⚠️ Alert';
+      wsStatus.style.color = '#ef4444';
+    }
   } else {
     // Default: 'listening'
-    eyesListening.classList.remove('hidden');
+    if (eyesListening) eyesListening.classList.remove('hidden');
+
+    if (charHeadBorder) charHeadBorder.setAttribute('stroke', '#06b6d4');
+    if (charEarL) charEarL.setAttribute('fill', '#06b6d4');
+    if (charEarR) charEarR.setAttribute('fill', '#06b6d4');
+    if (charForeheadGem) {
+      charForeheadGem.style.background = '#22d3ee';
+      charForeheadGem.style.boxShadow = '0 0 6px #22d3ee';
+    }
+    if (wsDot) wsDot.className = 'status-dot listening';
+    if (wsStatus) {
+      wsStatus.textContent = currentLanguage === 'ja-JP' ? '傾聴中' : 'Listening';
+      wsStatus.style.color = '';
+    }
   }
 }
 
@@ -392,34 +452,46 @@ let thinkingTimeout = null;
 function handleServerMessage(msg) {
   if (msg.type === 'transcript') {
     if (msg.is_final) {
-      setAvatarState('thinking');
-      setSpeechBubble(`Processed: "${msg.text.slice(0, 45)}..."`, 'thinking');
+      setAvatarState('generating');
+      const genMsg = currentLanguage === 'ja-JP'
+        ? `⚡ 生成中 & 傾聴中...「${msg.text.slice(0, 32)}」`
+        : `⚡ Generating & Listening... "${msg.text.slice(0, 36)}"`;
+      setSpeechBubble(genMsg, 'generating');
       if (thinkingTimeout) clearTimeout(thinkingTimeout);
       thinkingTimeout = setTimeout(() => {
-        if (!mouthBar.classList.contains('speaking-mouth') && avatarIcon.classList.contains('avatar-thinking')) {
+        if (!mouthBar.classList.contains('speaking-mouth') && charWrapper.classList.contains('generating')) {
           setAvatarState('listening');
-          setSpeechBubble('Listening to meeting audio...');
+          setSpeechBubble(currentLanguage === 'ja-JP' ? '会議音声を傾聴中...' : 'Listening to meeting audio...');
         }
-      }, 6000);
+      }, 9000);
+    } else {
+      const isGen = charWrapper.classList.contains('generating');
+      const prefix = isGen 
+        ? (currentLanguage === 'ja-JP' ? '⚡ 生成中 / 認識中: ' : '⚡ Generating / Hearing: ')
+        : '';
+      setSpeechBubble(`${prefix}"${msg.text}"`);
     }
   } else if (msg.type === 'turn_complete') {
     if (thinkingTimeout) clearTimeout(thinkingTimeout);
     if (!mouthBar.classList.contains('speaking-mouth')) {
       setAvatarState('listening');
-      setSpeechBubble('Listening to meeting audio...');
+      setSpeechBubble(currentLanguage === 'ja-JP' ? '会議音声を傾聴中...' : 'Listening to meeting audio...');
     }
   } else if (msg.type === 'status') {
-    wsStatus.textContent = msg.status || 'Active';
+    if (wsStatus && !charWrapper.classList.contains('generating')) {
+      wsStatus.textContent = msg.status || 'Active';
+    }
   } else if (msg.type === 'block_upsert') {
     if (thinkingTimeout) clearTimeout(thinkingTimeout);
     storeAndRenderBlock(msg.block);
     // Return to listening unless currently speaking audio
     if (!mouthBar.classList.contains('speaking-mouth')) {
       setAvatarState('listening');
-      setSpeechBubble('Canvas visual updated.');
+      const updateMsg = currentLanguage === 'ja-JP' ? 'キャンバスを更新しました（傾聴中）' : 'Canvas visual updated. (Listening)';
+      setSpeechBubble(updateMsg);
       setTimeout(() => {
         if (!mouthBar.classList.contains('speaking-mouth')) {
-          setSpeechBubble('Listening to meeting audio...');
+          setSpeechBubble(currentLanguage === 'ja-JP' ? '会議音声を傾聴中...' : 'Listening to meeting audio...');
         }
       }, 2500);
     }
@@ -1006,8 +1078,11 @@ function sendManualTurn() {
   const text = manualTextInput.value.trim();
   if (!text) return;
 
-  setAvatarState('thinking');
-  setSpeechBubble(`Sent: "${text}"`, 'thinking');
+  setAvatarState('generating');
+  const sendMsg = currentLanguage === 'ja-JP'
+    ? `⚡ 生成中 & 傾聴中...「${text.slice(0, 30)}」`
+    : `⚡ Generating & Listening... "${text.slice(0, 34)}"`;
+  setSpeechBubble(sendMsg, 'generating');
 
   if (ws && ws.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify({ type: 'transcript_event', text: text, is_final: true, immediate: true }));

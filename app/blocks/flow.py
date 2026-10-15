@@ -14,14 +14,86 @@ from typing import Dict, Any, List, Tuple
 from app.blocks.schema import FlowBlock, FlowNode, FlowEdge
 
 
-def wrap_text(text: str, width: int = 24) -> List[str]:
-    """Wrap text to roughly specified width."""
+def visual_char_width(char: str) -> float:
+    """Return proportional width weight: ~1.85 for CJK full-width, 1.0 for Latin/ASCII."""
+    code = ord(char)
+    if (
+        (0x1100 <= code <= 0x11FF)
+        or (0x2E80 <= code <= 0x9FFF)
+        or (0xAC00 <= code <= 0xD7AF)
+        or (0xF900 <= code <= 0xFAFF)
+        or (0xFF01 <= code <= 0xFF60)
+        or (0xFFE0 <= code <= 0xFFE6)
+    ):
+        return 1.85
+    return 1.0
+
+
+def visual_length(text: str) -> float:
+    """Calculate total visual display width of a string."""
+    if not text:
+        return 0.0
+    return sum(visual_char_width(c) for c in text)
+
+
+def wrap_text_visual(text: str, max_visual_width: float) -> List[str]:
+    """
+    Wrap text cleanly taking into account both CJK full-width characters
+    and English words, without requiring whitespace spaces for Japanese.
+    """
     if not text:
         return []
     lines = []
-    for line in text.split("\n"):
-        wrapped = textwrap.wrap(line.strip(), width=width)
-        lines.extend(wrapped if wrapped else [""])
+    for paragraph in text.split("\n"):
+        paragraph = paragraph.strip()
+        if not paragraph:
+            continue
+        curr_line = []
+        curr_w = 0.0
+        has_spaces = " " in paragraph
+        if has_spaces:
+            words = paragraph.split(" ")
+            for word in words:
+                word_w = visual_length(word)
+                space_w = 1.0 if curr_line else 0.0
+                if curr_w + space_w + word_w <= max_visual_width:
+                    if curr_line:
+                        curr_line.append(" ")
+                        curr_w += 1.0
+                    curr_line.append(word)
+                    curr_w += word_w
+                else:
+                    if curr_line:
+                        lines.append("".join(curr_line))
+                        curr_line = []
+                        curr_w = 0.0
+                    if word_w > max_visual_width:
+                        for c in word:
+                            cw = visual_char_width(c)
+                            if curr_w + cw > max_visual_width and curr_line:
+                                lines.append("".join(curr_line))
+                                curr_line = [c]
+                                curr_w = cw
+                            else:
+                                curr_line.append(c)
+                                curr_w += cw
+                    else:
+                        curr_line = [word]
+                        curr_w = word_w
+            if curr_line:
+                lines.append("".join(curr_line))
+        else:
+            for c in paragraph:
+                cw = visual_char_width(c)
+                if curr_w + cw > max_visual_width and curr_line:
+                    lines.append("".join(curr_line))
+                    curr_line = [c]
+                    curr_w = cw
+                else:
+                    curr_line.append(c)
+                    curr_w += cw
+            if curr_line:
+                lines.append("".join(curr_line))
     return lines
 
 
@@ -38,13 +110,13 @@ def render_flow(data: Any) -> str:
     if not nodes:
         return "<div class='flow-empty' style='color:#8b949e;padding:1rem;'>No steps recorded yet.</div>"
 
-    node_width = 330
-    node_height = 96
+    node_width = 340
+    node_height = 100
     x_center = 360
     x_left = 180
     x_right = 540
     y_start = 45
-    y_gap = 145
+    y_gap = 150
 
     # Compute node positions
     positions: Dict[str, Tuple[float, float, float, float]] = {}  # id -> (x, y, w, h)
@@ -222,10 +294,10 @@ def render_flow(data: Any) -> str:
                 f'<rect x="{img_x}" y="{img_y}" width="{img_size}" height="{img_size}" rx="8" '
                 f'fill="none" stroke="#06b6d4" stroke-width="1.5" />'
             )
-            text_x = nx + 92
+            text_x = nx + 88
             text_anchor = "start"
-            max_title_w = 21
-            max_note_w = 26
+            max_title_w = 20.0 if node.shape == "decision" else 24.0
+            max_note_w = 22.0 if node.shape == "decision" else 27.0
         elif node.image_url == "loading":
             img_size = 58
             img_x = nx + 12
@@ -240,36 +312,44 @@ def render_flow(data: Any) -> str:
             )
             text_x = nx + 82
             text_anchor = "start"
-            max_title_w = 21
-            max_note_w = 26
+            max_title_w = 20.0 if node.shape == "decision" else 24.0
+            max_note_w = 22.0 if node.shape == "decision" else 27.0
         else:
             text_x = nx + nw / 2
             text_anchor = "middle"
-            max_title_w = 28
-            max_note_w = 36
+            max_title_w = 24.0 if node.shape == "decision" else 32.0
+            max_note_w = 28.0 if node.shape == "decision" else 38.0
+
+        is_decision = (node.shape == "decision")
 
         # Title: limit to 2 lines max
-        raw_title_lines = wrap_text(node.label, width=max_title_w)
+        raw_title_lines = wrap_text_visual(node.label, max_visual_width=max_title_w)
         if len(raw_title_lines) > 2:
-            title_lines = [raw_title_lines[0], raw_title_lines[1][:max_title_w - 3] + "..."]
+            title_lines = [raw_title_lines[0], raw_title_lines[1][:max(4, int(max_title_w) - 3)] + "..."]
         else:
             title_lines = raw_title_lines
 
-        # Note: limit to at most 2 lines, determine if "Show more" is needed
-        raw_note_lines = wrap_text(node.note, width=max_note_w) if node.note else []
-        max_note_display = 2 if len(title_lines) <= 1 else 1
-        has_more = len(raw_note_lines) > max_note_display or len(node.note or "") > 55
+        # Note: limit to at most 1 or 2 lines
+        max_note_display = 1 if len(title_lines) >= 2 or is_decision else 2
+        raw_note_lines = wrap_text_visual(node.note, max_visual_width=max_note_w) if node.note else []
 
-        if has_more:
-            note_lines = raw_note_lines[:max_note_display]
-            if note_lines:
-                note_lines[-1] = note_lines[-1][:max_note_w - 3] + "..."
-        else:
-            note_lines = raw_note_lines[:max_note_display]
+        # Determine if "Show more" is needed
+        has_more = (
+            len(raw_note_lines) > max_note_display
+            or (len(raw_title_lines) > 2)
+            or visual_length(node.note or "") > (max_note_w * max_note_display * 0.95)
+        )
+
+        note_lines = raw_note_lines[:max_note_display]
+        if has_more and note_lines:
+            last_line = note_lines[-1]
+            if visual_length(last_line) > max_note_w - 4:
+                note_lines[-1] = last_line[:max(4, len(last_line) - 2)] + "..."
+            elif len(raw_note_lines) > max_note_display:
+                note_lines[-1] = last_line + "..."
 
         line_h = 16
-        # Start safely inside the card
-        text_start_y = ny + 26 if len(title_lines) == 1 else ny + 20
+        text_start_y = ny + 26 if len(title_lines) <= 1 else ny + 20
         curr_text_y = text_start_y
 
         for t_line in title_lines:
@@ -293,10 +373,14 @@ def render_flow(data: Any) -> str:
 
         # Render "Show more" button on card if content exceeded box
         if has_more:
-            btn_w = 76
+            btn_w = 78
             btn_h = 18
-            btn_x = nx + nw - btn_w - 10
-            btn_y = ny + nh - btn_h - 7
+            if is_decision:
+                btn_x = nx + nw / 2 - btn_w / 2
+                btn_y = ny + nh - btn_h - 10
+            else:
+                btn_x = nx + nw - btn_w - 12
+                btn_y = ny + nh - btn_h - 8
             svg_parts.append(
                 f'<g class="flow-show-more-btn" data-action="show-more" data-ref="{html.escape(node.id)}" '
                 f'data-node-id="{html.escape(node.id)}" '
