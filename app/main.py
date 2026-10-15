@@ -36,6 +36,18 @@ from app.auth import (
 
 load_dotenv()
 
+# Ensure critical GCP project environment variables are present in container
+if not os.getenv("GOOGLE_CLOUD_PROJECT"):
+    os.environ["GOOGLE_CLOUD_PROJECT"] = "project-97d34c6c-e057-425f-987"
+if not os.getenv("GOOGLE_CLOUD_LOCATION"):
+    os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+if not os.getenv("GOOGLE_GENAI_USE_VERTEXAI"):
+    os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "TRUE"
+if not os.getenv("REASONING_MODEL"):
+    os.environ["REASONING_MODEL"] = "gemini-3.5-flash-lite"
+if not os.getenv("IMAGE_MODEL"):
+    os.environ["IMAGE_MODEL"] = "gemini-3.1-flash-lite-image"
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("server")
 

@@ -31,7 +31,7 @@ def get_storage_client():
     if _storage_client is None:
         try:
             from google.cloud import storage
-            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+            project = os.getenv("GOOGLE_CLOUD_PROJECT", "project-97d34c6c-e057-425f-987")
             if project:
                 _storage_client = storage.Client(project=project)
         except Exception as e:

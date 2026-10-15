@@ -25,7 +25,12 @@ def get_genai_client():
         try:
             from google import genai
             use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
-            project = os.getenv("GOOGLE_CLOUD_PROJECT")
+            project = (
+                os.getenv("GOOGLE_CLOUD_PROJECT")
+                or os.getenv("GCP_PROJECT")
+                or os.getenv("GCLOUD_PROJECT")
+                or "project-97d34c6c-e057-425f-987"
+            )
             location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
             api_key = os.getenv("GEMINI_API_KEY")
 
@@ -33,6 +38,8 @@ def get_genai_client():
                 _CACHED_GENAI_CLIENT = genai.Client(vertexai=True, project=project, location=location)
             elif api_key:
                 _CACHED_GENAI_CLIENT = genai.Client(api_key=api_key)
+            elif project:
+                _CACHED_GENAI_CLIENT = genai.Client(vertexai=True, project=project, location=location)
         except Exception as err:
             logger.warning(f"Failed to initialize GenAI client: {err}")
     return _CACHED_GENAI_CLIENT

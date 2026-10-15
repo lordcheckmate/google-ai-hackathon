@@ -33,7 +33,7 @@ Write-Host "==========================================================" -Foregro
   --max-instances 3 `
   --cpu-boost `
   --memory 1Gi `
-  --set-env-vars GOOGLE_GENAI_USE_VERTEXAI=TRUE,GOOGLE_CLOUD_LOCATION=us-central1,REASONING_MODEL=gemini-2.5-flash,IMAGE_MODEL=gemini-3.1-flash-image,APP_USER=judge,APP_PASSWORD=Aegis2026!
+  --set-env-vars GOOGLE_CLOUD_PROJECT=project-97d34c6c-e057-425f-987,GOOGLE_CLOUD_LOCATION=global,GOOGLE_GENAI_USE_VERTEXAI=TRUE,GCS_BUCKET=project-97d34c6c-e057-425f-987-assets,REASONING_MODEL=gemini-3.5-flash-lite,IMAGE_MODEL=gemini-3.1-flash-lite-image,APP_USER=judge,APP_PASSWORD=Aegis2026!
 
 $serviceUrl = (& $gcloudCmd run services describe $serviceName --platform managed --region $region --format "value(status.url)")
 
