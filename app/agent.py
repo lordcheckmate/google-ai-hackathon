@@ -577,6 +577,7 @@ class MeetingAgentSession:
         except Exception as e:
             logger.error(f"Error in ADK agent turn: {e}", exc_info=True)
         finally:
+            _emit_ws({"type": "turn_complete"})
             _current_sid.reset(token_sid)
             _current_ws_sender.reset(token_sender)
             _current_transcript.reset(token_transcript)

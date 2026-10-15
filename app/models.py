@@ -12,30 +12,21 @@ logger = logging.getLogger("models")
 
 def resolve_reasoning_model() -> str:
     """
-    Resolves the fastest flash-lite model available.
-    Configured for 'gemini-3.5-flash-lite' with automatic fallback to 'gemini-2.5-flash-lite'
-    if the Vertex AI project region does not yet host 3.5.
+    Resolves the fastest available flash-lite model.
+    Defaults to 'gemini-2.5-flash-lite' which is verified and instant on Vertex AI.
     """
-    requested = os.getenv("REASONING_MODEL", "gemini-3.5-flash-lite").strip()
+    requested = os.getenv("REASONING_MODEL", "gemini-2.5-flash-lite").strip()
     use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
 
-    if requested in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite") and use_vertex:
-        try:
-            from google import genai
-            project = os.getenv("GOOGLE_CLOUD_PROJECT")
-            location = os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-            client = genai.Client(vertexai=True, project=project, location=location)
-            client.models.generate_content(model=requested, contents="test")
-            logger.info(f"Successfully connected to Vertex AI model: {requested}")
-            return requested
-        except Exception:
-            logger.info(
-                f"Model '{requested}' is not yet enabled on Vertex AI for this project. "
-                f"Active high-speed Flash-Lite model: 'gemini-2.5-flash-lite'"
-            )
-            return "gemini-2.5-flash-lite"
+    # Known models requiring Gemini Developer API rather than Vertex AI in current region
+    if use_vertex and requested in ("gemini-3.5-flash-lite", "gemini-3.1-flash-lite"):
+        logger.info(
+            f"Model '{requested}' is designated for Gemini Developer API. "
+            f"Using active high-speed Vertex AI model: 'gemini-2.5-flash-lite'"
+        )
+        return "gemini-2.5-flash-lite"
 
-    return requested
+    return requested or "gemini-2.5-flash-lite"
 
 
 REASONING_MODEL = resolve_reasoning_model()

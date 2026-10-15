@@ -140,19 +140,41 @@ function connectWebSocket() {
   };
 }
 
+let thinkingTimeout = null;
+
 function handleServerMessage(msg) {
   if (msg.type === 'transcript') {
     if (msg.is_final) {
       setAvatarState('thinking');
-      setSpeechBubble(`Processed: ${msg.text.slice(0, 45)}...`, 'thinking');
+      setSpeechBubble(`Processed: "${msg.text.slice(0, 45)}..."`, 'thinking');
+      if (thinkingTimeout) clearTimeout(thinkingTimeout);
+      thinkingTimeout = setTimeout(() => {
+        if (!mouthBar.classList.contains('speaking-mouth') && avatarIcon.classList.contains('avatar-thinking')) {
+          setAvatarState('listening');
+          setSpeechBubble('Listening to meeting audio...');
+        }
+      }, 6000);
+    }
+  } else if (msg.type === 'turn_complete') {
+    if (thinkingTimeout) clearTimeout(thinkingTimeout);
+    if (!mouthBar.classList.contains('speaking-mouth')) {
+      setAvatarState('listening');
+      setSpeechBubble('Listening to meeting audio...');
     }
   } else if (msg.type === 'status') {
     wsStatus.textContent = msg.status || 'Active';
   } else if (msg.type === 'block_upsert') {
+    if (thinkingTimeout) clearTimeout(thinkingTimeout);
     storeAndRenderBlock(msg.block);
     // Return to listening unless currently speaking audio
     if (!mouthBar.classList.contains('speaking-mouth')) {
       setAvatarState('listening');
+      setSpeechBubble('Canvas visual updated.');
+      setTimeout(() => {
+        if (!mouthBar.classList.contains('speaking-mouth')) {
+          setSpeechBubble('Listening to meeting audio...');
+        }
+      }, 2500);
     }
   } else if (msg.type === 'block_remove') {
     removeBlock(msg.block_id);
