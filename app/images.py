@@ -65,8 +65,17 @@ def build_semantic_step_icon(label: str) -> str:
     """
     lbl = label.lower().strip()
 
+    # 0. Banana / Banana Shape / Nano Banana (Nano Banana Mascot)
+    if any(k in lbl for k in ["banana", "banana shape", "fruit", "yellow shape"]):
+        return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
+  <path d="M 10 38 C 7 24, 20 10, 36 8 C 38 7, 40 8, 39 10 C 37 13, 30 16, 25 22 C 18 30, 15 39, 10 38 Z" fill="#facc15" stroke="#eab308" stroke-width="2"/>
+  <path d="M 36 8 L 41 6" stroke="#854d0e" stroke-width="2.5" stroke-linecap="round"/>
+  <path d="M 12 37 C 17 31, 23 23, 28 17" stroke="#fef08a" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+  <circle cx="28" cy="19" r="1.5" fill="#ca8a04"/>
+</svg>'''
+
     # 1. Capture / Photo / Camera / Scan / Image
-    if any(k in lbl for k in ["capture", "photo", "camera", "snap", "scan", "raw image", "lens"]):
+    elif any(k in lbl for k in ["capture", "photo", "camera", "snap", "scan", "raw image", "lens"]):
         return '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="100%" height="100%">
   <rect x="6" y="13" width="36" height="26" rx="6" fill="#091224" stroke="#06b6d4" stroke-width="2"/>
   <circle cx="24" cy="26" r="9" fill="#0f1f38" stroke="#38bdf8" stroke-width="2"/>
@@ -171,6 +180,28 @@ def generate_step_image(
     # For compact flow node icons (36x36 px)
     if is_icon or ("line icon" in visual_description.lower() and len(node_label) < 25):
         svg_content = build_semantic_step_icon(node_label)
+        generated_bytes = sanitize_svg(svg_content).encode("utf-8")
+        with open(local_path, "wb") as f:
+            f.write(generated_bytes)
+    # Dedicated high-contrast Nano Banana illustration schematic
+    if any(k in node_label.lower() for k in ["banana", "banana shape", "banana shappe"]):
+        svg_content = '''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 200" width="100%" height="auto">
+  <defs>
+    <filter id="banana-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="0" stdDeviation="6" flood-color="#facc15" flood-opacity="0.6"/>
+    </filter>
+  </defs>
+  <rect width="380" height="200" rx="14" fill="#060c18" stroke="#1e293b" stroke-width="1.5"/>
+  <text x="25" y="28" fill="#64748b" font-size="10" font-family="monospace" letter-spacing="1">NANO BANANA ILLUSTRATION // SHAPE MODEL</text>
+  
+  <g transform="translate(190, 110) scale(1.6)" filter="url(#banana-glow)">
+    <path d="M -40 30 C -60 -10, 0 -60, 50 -60 C 55 -60, 60 -56, 56 -50 C 50 -40, 25 -30, 10 -10 C -10 15, -20 40, -40 30 Z" fill="#facc15" stroke="#eab308" stroke-width="3"/>
+    <path d="M 50 -60 L 62 -65" stroke="#713f12" stroke-width="4" stroke-linecap="round"/>
+    <path d="M -34 26 C -20 10, 5 -12, 28 -30" stroke="#fef08a" stroke-width="2.5" stroke-linecap="round" fill="none"/>
+    <circle cx="28" cy="-26" r="2.5" fill="#ca8a04"/>
+  </g>
+  <text x="190" y="185" fill="#fef08a" font-size="13" font-weight="bold" font-family="monospace" text-anchor="middle">🍌 Banana Shape Vector Model</text>
+</svg>'''
         generated_bytes = sanitize_svg(svg_content).encode("utf-8")
         with open(local_path, "wb") as f:
             f.write(generated_bytes)

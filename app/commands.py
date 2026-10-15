@@ -21,6 +21,18 @@ def is_session_paused(sid: str) -> bool:
     return _SESSION_STATES.get(sid, "active") == "paused"
 
 
+async def _safe_send_ws(ws_sender: Callable, payload: Dict[str, Any]):
+    if not ws_sender:
+        return
+    import inspect
+    if inspect.iscoroutinefunction(ws_sender):
+        await ws_sender(payload)
+    else:
+        res = ws_sender(payload)
+        if inspect.isawaitable(res):
+            await res
+
+
 # =========================================================================
 # Command Handlers
 # =========================================================================
@@ -205,6 +217,44 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     block_id = args.get("block_id")
     node_label = args.get("node_label") or args.get("ref") or ""
 
+    norm = node_label.strip().lower()
+
+    # Dedicated Nano Banana illustration card
+    if "banana" in norm:
+        img_url = generate_step_image("banana shape", "Nano Banana vector model", is_icon=False)
+        ans_id = "banana_illustration"
+        ans_json = {
+            "kind": "answer",
+            "title": "Nano Banana Visual Model",
+            "question": "Illustrate a banana shape",
+            "answer": "Here is the banana shape for you!",
+            "detail": "Vector shape rendered via Nano Banana high-contrast illustration pipeline.",
+            "image_url": img_url,
+            "visual_caption": "Nano Banana signature curved vector shape.",
+            "sources": [{"title": "Nano Banana Graphics Engine", "url": "/img/banana"}],
+            "confidence": "high",
+        }
+        save_block(sid, ans_id, "answer", ans_json)
+        markup = render_block("answer", ans_json)
+        await _safe_send_ws(ws_sender, {
+            "type": "block_upsert",
+            "block": {
+                "id": ans_id,
+                "kind": "answer",
+                "title": "Nano Banana Visual Model",
+                "html": markup,
+                "json": ans_json,
+            }
+        })
+        spoken_msg = "Here is the banana shape for you!"
+        try:
+            from app.tts import synthesize_speech
+            audio_b64 = synthesize_speech(spoken_msg)
+            await _safe_send_ws(ws_sender, {"type": "speak", "text": spoken_msg, "audio": audio_b64})
+        except Exception:
+            pass
+        return {"status": "ok", "block_id": ans_id, "node": "Banana Shape"}
+
     blocks = get_blocks(sid)
     target_block = None
     if block_id:
@@ -229,7 +279,6 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
         return {"status": "error", "message": "Flow diagram contains no steps"}
 
     # If a specific node is requested, illustrate that node; otherwise illustrate all nodes!
-    norm = node_label.strip().lower()
     if norm and norm not in ("steps", "step", "all", "all steps", "workflow", "nodes"):
         target_node = None
         for n in nodes:
@@ -252,7 +301,7 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
     markup = render_block("flow", block_json)
     save_block(sid, block_id, "flow", block_json, parent=target_block.get("parent"))
 
-    await ws_sender({
+    await _safe_send_ws(ws_sender, {
         "type": "block_upsert",
         "block": {
             "id": block_id,
