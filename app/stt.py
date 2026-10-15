@@ -49,7 +49,7 @@ class STTSession:
         self.audio_queue: queue.Queue = queue.Queue(maxsize=500)
         self.stop_event = threading.Event()
         self.thread: Optional[threading.Thread] = None
-        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "")
+        self.project_id = os.getenv("GOOGLE_CLOUD_PROJECT") or os.getenv("GCP_PROJECT") or "project-97d34c6c-e057-425f-987"
 
     def update_phrase_hints(self, hints: List[str]):
         """Update domain phrase hints when canvas blocks change."""

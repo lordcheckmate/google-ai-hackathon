@@ -219,7 +219,7 @@ def upsert_block(block_id: str, kind: str, instruction: str) -> dict:
     }
 
 
-def remove_step(step: str, block_id: str | None = None) -> dict:
+def remove_step(step: str, block_id: str = "") -> dict:
     """
     Remove a specific step or node from the active flow diagram or checklist.
     Connects the surrounding steps together seamlessly. Use this whenever the user
@@ -343,7 +343,7 @@ def remove_step(step: str, block_id: str | None = None) -> dict:
     return {"status": "error", "message": f"Block kind '{kind}' does not support step removal"}
 
 
-def remove_block(block_id: str, target: str | None = None) -> dict:
+def remove_block(block_id: str, target: str = "") -> dict:
     """
     Remove an entire visual block/diagram from the canvas.
     Note: If asked to remove a single step from a diagram, use remove_step instead.
@@ -692,7 +692,7 @@ def flag_contradiction(earlier: str, now: str) -> dict:
     return {"status": "ok", "question": question}
 
 
-def read_back(block_id: str | None) -> str:
+def read_back(block_id: str = "") -> str:
     """
     Short spoken summary of one block, or of the entire canvas.
     """
