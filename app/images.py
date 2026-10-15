@@ -17,7 +17,7 @@ import logging
 from pathlib import Path
 from typing import Optional, Tuple
 
-from app.models import REASONING_MODEL
+from app.models import REASONING_MODEL, IMAGE_MODEL
 
 logger = logging.getLogger("images")
 
@@ -160,6 +160,69 @@ def build_semantic_step_icon(label: str) -> str:
   <polygon points="24,4 42,14 42,34 24,44 6,34 6,14" fill="#0c1322" stroke="#06b6d4" stroke-width="2"/>
   <text x="24" y="29" fill="#38bdf8" font-size="14" font-weight="800" text-anchor="middle" font-family="monospace">{html.escape(initial)}</text>
 </svg>'''
+
+
+def generate_nano_banana_image(
+    concept: str,
+    context: str = ""
+) -> Tuple[str, str]:
+    """
+    Generates high-contrast visual illustrations and technical descriptions using
+    Gemini 2.5 Flash Image (Nano Banana) via GenAI Client (Vertex AI / global).
+    Returns (image_url, description_text).
+    Falls back gracefully to high-contrast vector synthesizer if offline.
+    """
+    image_id = f"nb_{uuid.uuid4().hex[:12]}.png"
+    local_path = CACHE_DIR / image_id
+
+    generated_bytes = None
+    description_text = ""
+
+    try:
+        from google import genai
+        use_vertex = os.getenv("GOOGLE_GENAI_USE_VERTEXAI", "").upper() == "TRUE"
+        project = os.getenv("GOOGLE_CLOUD_PROJECT")
+        location = os.getenv("GOOGLE_CLOUD_LOCATION", "global")
+        api_key = os.getenv("GEMINI_API_KEY")
+
+        client = None
+        if use_vertex and project:
+            client = genai.Client(vertexai=True, project=project, location=location)
+        elif api_key:
+            client = genai.Client(api_key=api_key)
+
+        if client:
+            model = os.getenv("IMAGE_MODEL", IMAGE_MODEL)
+            prompt = (
+                f"Create a clean, minimalist, high-contrast visual illustration for this technical concept: '{concept}'. "
+                f"Context: '{context}'. "
+                f"Style: Dark OLED aesthetic (#050811), crisp clean lines with high-tech neon cyan (#06b6d4) and emerald (#10b981) accents. "
+                f"Also provide a concise 1-sentence technical explanation of what is depicted."
+            )
+            resp = client.models.generate_content(
+                model=model,
+                contents=prompt,
+            )
+            if resp.candidates and resp.candidates[0].content:
+                for part in resp.candidates[0].content.parts:
+                    if getattr(part, "text", None):
+                        description_text += part.text + " "
+                    if getattr(part, "inline_data", None) and part.inline_data.data:
+                        generated_bytes = part.inline_data.data
+
+            description_text = description_text.strip()
+    except Exception as e:
+        logger.warning(f"Gemini 2.5 Flash Image (Nano Banana) generation failed ({e}); using vector fallback.")
+
+    if generated_bytes:
+        with open(local_path, "wb") as f:
+            f.write(generated_bytes)
+        return f"/img/{image_id}", description_text
+
+    # Fallback to SVG schematic
+    svg_url = generate_step_image(concept, context or description_text, is_icon=False)
+    fallback_desc = description_text or f"Technical schematic and execution model for '{concept}'."
+    return svg_url, fallback_desc
 
 
 def generate_step_image(

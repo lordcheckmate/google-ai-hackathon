@@ -211,27 +211,28 @@ async def handle_inspect(sid: str, args: Dict[str, Any], ws_sender: Callable) ->
 
 
 async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
-    """Generate Nano Banana illustration for a flow step."""
-    from app.images import generate_step_image
+    """Generate Gemini 2.5 Flash Image (Nano Banana) illustration with descriptive caption."""
+    from app.images import generate_nano_banana_image, generate_step_image
+    import uuid
 
     block_id = args.get("block_id")
     node_label = args.get("node_label") or args.get("ref") or ""
 
     norm = node_label.strip().lower()
 
-    # Dedicated Nano Banana illustration card
+    # Dedicated Nano Banana illustration tab
     if "banana" in norm:
-        img_url = generate_step_image("banana shape", "Nano Banana vector model", is_icon=False)
+        img_url, gen_desc = generate_nano_banana_image("banana-shaped AI agent with cyber neon accents", "Banana shape assistant mascot")
         ans_id = "banana_illustration"
         ans_json = {
             "kind": "answer",
-            "title": "Nano Banana Visual Model",
-            "question": "Illustrate a banana shape",
-            "answer": "Here is the banana shape for you!",
-            "detail": "Vector shape rendered via Nano Banana high-contrast illustration pipeline.",
+            "title": "🍌 Nano Banana Agent",
+            "question": "Illustrate a banana shape agent",
+            "answer": gen_desc or "Here is the banana shape for you!",
+            "detail": "Generated using Gemini 2.5 Flash Image (Nano Banana) with single-turn visual + descriptive synthesis.",
             "image_url": img_url,
-            "visual_caption": "Nano Banana signature curved vector shape.",
-            "sources": [{"title": "Nano Banana Graphics Engine", "url": "/img/banana"}],
+            "visual_caption": gen_desc or "Banana-shaped AI agent generated via Gemini 2.5 Flash Image.",
+            "sources": [{"title": "Gemini 2.5 Flash Image (Nano Banana)", "url": img_url}],
             "confidence": "high",
         }
         save_block(sid, ans_id, "answer", ans_json)
@@ -241,7 +242,7 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
             "block": {
                 "id": ans_id,
                 "kind": "answer",
-                "title": "Nano Banana Visual Model",
+                "title": "🍌 Nano Banana Agent",
                 "html": markup,
                 "json": ans_json,
             }
@@ -285,8 +286,43 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
             if norm in n.get("label", "").lower() or norm == n.get("id", "").lower() or f"step {idx+1}" in norm:
                 steps_to_illustrate.append((idx + 1, n))
                 break
-        if not steps_to_illustrate and nodes:
-            steps_to_illustrate.append((1, nodes[0]))
+
+        if not steps_to_illustrate:
+            # Concept requested is not an existing workflow step (e.g. standalone concept during meeting)
+            clean_name = node_label.strip()
+            tab_id = f"tab_concept_{uuid.uuid4().hex[:6]}"
+            img_url, gen_desc = generate_nano_banana_image(clean_name, "Meeting visual topic")
+            tab_json = {
+                "kind": "answer",
+                "title": f"🖼️ {clean_name[:20].capitalize()}",
+                "question": f"Illustration: {clean_name}",
+                "answer": gen_desc or f"Illustration for '{clean_name}'.",
+                "detail": "Generated using Gemini 2.5 Flash Image (Nano Banana).",
+                "image_url": img_url,
+                "visual_caption": gen_desc or f"Visual schematic for {clean_name}.",
+                "sources": [{"title": "Gemini 2.5 Flash Image (Nano Banana)", "url": img_url}],
+                "confidence": "high",
+            }
+            save_block(sid, tab_id, "answer", tab_json)
+            markup = render_block("answer", tab_json)
+            await _safe_send_ws(ws_sender, {
+                "type": "block_upsert",
+                "block": {
+                    "id": tab_id,
+                    "kind": "answer",
+                    "title": f"🖼️ {clean_name[:20].capitalize()}",
+                    "html": markup,
+                    "json": tab_json,
+                }
+            })
+            spoken_text = f"Here is the illustration for {clean_name}."
+            try:
+                from app.tts import synthesize_speech
+                audio_b64 = synthesize_speech(spoken_text)
+                await _safe_send_ws(ws_sender, {"type": "speak", "text": spoken_text, "audio": audio_b64})
+            except Exception:
+                pass
+            return {"status": "ok", "block_id": tab_id, "node": clean_name}
     else:
         # All steps get their own dedicated tab at the top!
         for idx, n in enumerate(nodes):
@@ -298,17 +334,22 @@ async def handle_illustrate(sid: str, args: Dict[str, Any], ws_sender: Callable)
         lbl = node.get("label", f"Step {step_num}")
         note = node.get("note", "")
         tab_id = f"tab_step_{step_num}_{node_id}"
-        img_url = generate_step_image(lbl, f"Step illustration for {lbl}: {note}", is_icon=False)
+
+        # Generate using Gemini 2.5 Flash Image (Nano Banana) with fast description synthesis
+        img_url, gen_desc = generate_nano_banana_image(
+            f"Step {step_num}: {lbl}",
+            note or f"Workflow step for {lbl}"
+        )
 
         tab_json = {
             "kind": "answer",
             "title": f"🖼️ Step {step_num}: {lbl[:20]}",
             "question": f"Step {step_num}: {lbl}",
-            "answer": note or f"Detailed execution schematic for '{lbl}'.",
+            "answer": gen_desc or note or f"Detailed execution schematic for '{lbl}'.",
             "detail": f"Step {step_num} of {len(nodes)} in {block_json.get('title', 'Workflow')}.",
             "image_url": img_url,
-            "visual_caption": f"Nano Banana visual diagram for {lbl}.",
-            "sources": [{"title": "Nano Banana Visual Pipeline", "url": img_url}],
+            "visual_caption": gen_desc or f"Gemini 2.5 Flash Image (Nano Banana) illustration for {lbl}.",
+            "sources": [{"title": "Gemini 2.5 Flash Image (Nano Banana)", "url": img_url}],
             "confidence": "high",
         }
         save_block(sid, tab_id, "answer", tab_json, parent={"block_id": target_block["id"], "ref": node_id})

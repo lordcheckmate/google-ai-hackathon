@@ -20,4 +20,4 @@ def resolve_reasoning_model() -> str:
 
 
 REASONING_MODEL = resolve_reasoning_model()
-IMAGE_MODEL = os.getenv("IMAGE_MODEL", "imagen-3.0-generate-002")
+IMAGE_MODEL = os.getenv("IMAGE_MODEL", "gemini-2.5-flash-image")

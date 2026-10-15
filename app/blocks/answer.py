@@ -58,7 +58,7 @@ def render_answer(data: Any) -> str:
             f'<div class="answer-visual-wrapper" style="display:flex; justify-content:center; align-items:center; '
             f'margin:1rem 0; padding:1.25rem; background:#000; border:1px solid rgba(6,182,212,0.3); '
             f'border-radius:12px; box-shadow:0 0 20px rgba(6,182,212,0.15);">'
-            f'<img src="{html.escape(block.image_url)}" alt="Visual Explanation" style="max-height:180px; max-width:100%; object-fit:contain; border-radius:8px;" />'
+            f'<img src="{html.escape(block.image_url)}" alt="Visual Explanation" style="max-height:280px; max-width:100%; object-fit:contain; border-radius:8px;" />'
             f'</div>'
         )
     else:
