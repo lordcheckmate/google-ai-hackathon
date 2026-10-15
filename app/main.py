@@ -43,7 +43,11 @@ if STATIC_DIR.exists():
 async def root():
     index_file = STATIC_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(str(index_file))
+        resp = FileResponse(str(index_file))
+        resp.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+        return resp
     return PlainTextResponse("ok")
 
 
@@ -91,8 +95,8 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     sid = websocket.query_params.get("session_id") or "default_session"
     if websocket.query_params.get("fresh") == "1":
-        for b in get_blocks(sid):
-            delete_block(sid, b["id"])
+        from app.store import clear_session_blocks
+        clear_session_blocks(sid)
     save_session(sid, title="Live Meeting")
 
     logger.info(f"WebSocket client connected (session={sid})")

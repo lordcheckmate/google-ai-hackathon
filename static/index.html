@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AEGIS // AI Meeting Co-Pilot</title>
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/style.css?v=1.2">
 </head>
 <body>
 
@@ -82,6 +82,11 @@
         <span id="mic-text">Mic: Passive</span>
       </button>
 
+      <button class="export-btn" id="export-btn" title="Export meeting artifacts (Markdown, SVG, JSON)">
+        <span>💾</span>
+        <span>Export</span>
+      </button>
+
       <button class="reset-btn" id="reset-btn" title="Refresh canvas & start fresh">
         <span>🔄</span>
         <span>Reset</span>
@@ -136,6 +141,51 @@
     </div>
   </main>
 
-  <script src="/static/app.js"></script>
+  <!-- Export Modal Dialog -->
+  <div id="export-modal" class="modal-overlay hidden">
+    <div class="modal-box">
+      <div class="modal-header">
+        <h3 class="modal-title">EXPORT MEETING ARTIFACTS</h3>
+        <button id="close-export-modal" class="modal-close-btn" aria-label="Close">&times;</button>
+      </div>
+      <p class="modal-desc">Download or export the generated meeting diagrams, explanations, and structured data:</p>
+      
+      <div class="export-options">
+        <button id="export-md-btn" class="export-choice-btn">
+          <span class="choice-icon">📝</span>
+          <div class="choice-info">
+            <strong>Meeting Summary (.md)</strong>
+            <span>Markdown documentation with flows, steps, and Q&A</span>
+          </div>
+        </button>
+
+        <button id="export-svg-btn" class="export-choice-btn">
+          <span class="choice-icon">🖼️</span>
+          <div class="choice-info">
+            <strong>Current Diagram (.svg)</strong>
+            <span>High-res vector graphic of the active visual</span>
+          </div>
+        </button>
+
+        <button id="export-html-btn" class="export-choice-btn">
+          <span class="choice-icon">🌐</span>
+          <div class="choice-info">
+            <strong>Standalone Canvas (.html)</strong>
+            <span>Self-contained visual report with all diagrams</span>
+          </div>
+        </button>
+
+        <button id="export-json-btn" class="export-choice-btn">
+          <span class="choice-icon">⚙️</span>
+          <div class="choice-info">
+            <strong>Structured Data (.json)</strong>
+            <span>Raw JSON blocks for external storage or replay</span>
+          </div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js?v=1.2"></script>
 </body>
 </html>

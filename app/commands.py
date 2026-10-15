@@ -7,7 +7,7 @@ import re
 import logging
 from typing import Dict, Any, Optional, Callable, Tuple
 
-from app.store import get_block, save_block, delete_block, get_blocks, _CACHE, _BLOCKS, get_transcript_history
+from app.store import get_block, save_block, delete_block, get_blocks, clear_session_blocks, _CACHE, _BLOCKS, get_transcript_history
 from app.blocks import render_block
 from app.blocks.generate import generate_block_json
 
@@ -51,19 +51,17 @@ async def handle_end(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dic
 
 async def handle_clear(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:
     """Clear all blocks from the canvas and reset agent memory."""
-    blocks = get_blocks(sid)
-    for b in blocks:
-        delete_block(sid, b["id"])
+    cleared = clear_session_blocks(sid)
     _CACHE.clear()
     from app.agent import reset_agent_session
     await reset_agent_session(sid)
-    logger.info(f"Cleared all blocks and reset agent session for {sid}")
+    logger.info(f"Cleared {cleared} blocks and reset agent session for {sid}")
     if ws_sender:
         import inspect
         res = ws_sender({"type": "canvas_cleared"})
         if inspect.isawaitable(res):
             await res
-    return {"status": "ok", "cleared": len(blocks)}
+    return {"status": "ok", "cleared": cleared}
 
 
 async def handle_undo(sid: str, args: Dict[str, Any], ws_sender: Callable) -> Dict[str, Any]:

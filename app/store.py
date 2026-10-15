@@ -129,14 +129,34 @@ def save_block(
 def delete_block(sid: str, block_id: str) -> bool:
     if sid in _BLOCKS and block_id in _BLOCKS[sid]:
         del _BLOCKS[sid][block_id]
-        db = get_firestore_client()
-        if db:
-            try:
-                db.collection("sessions").document(sid).collection("blocks").document(block_id).delete()
-            except Exception as e:
-                logger.warning(f"Firestore delete_block error: {e}")
-        return True
-    return False
+    db = get_firestore_client()
+    if db:
+        try:
+            db.collection("sessions").document(sid).collection("blocks").document(block_id).delete()
+        except Exception as e:
+            logger.warning(f"Firestore delete_block error: {e}")
+    return True
+
+
+def clear_session_blocks(sid: str) -> int:
+    """Wipe all blocks for a session from both in-memory cache and Firestore."""
+    count = 0
+    if sid in _BLOCKS:
+        count = len(_BLOCKS[sid])
+        _BLOCKS[sid].clear()
+
+    db = get_firestore_client()
+    if db:
+        try:
+            coll = db.collection("sessions").document(sid).collection("blocks")
+            docs = list(coll.stream())
+            for d in docs:
+                d.reference.delete()
+            count = max(count, len(docs))
+            logger.info(f"Cleared {len(docs)} Firestore blocks for session {sid}")
+        except Exception as e:
+            logger.warning(f"Firestore clear_session_blocks error: {e}")
+    return count
 
 
 def log_turn(
